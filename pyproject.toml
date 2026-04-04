@@ -31,12 +31,24 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-cov>=4.1.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
-    "mypy>=1.7.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "radon>=6.0.0",
+    "pip-audit>=2.7.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "radon>=6.0.0",
+    "pip-audit>=2.7.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
 ]
 
 [project.scripts]
@@ -52,12 +64,28 @@ packages = ["src/apple_mail_mcp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 asyncio_mode = "auto"
-addopts = [
-    "--cov=apple_mail_mcp",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--strict-markers",
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "asyncio: mark test as an async test",
+    "integration: mark test as integration test (requires --run-integration)",
+    "e2e: mark test as end-to-end test (full MCP stack)",
+    "benchmark: mark test as performance benchmark",
+    "slow: mark test as slow-running",
+]
+
+[tool.coverage.run]
+source = ["apple_mail_mcp"]
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true
+exclude_lines = [
+    "if __name__ == .__main__.:",
 ]
 
 [tool.black]
@@ -67,6 +95,8 @@ target-version = ["py310", "py311", "py312", "py313"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
@@ -77,7 +107,7 @@ select = [
     "UP",  # pyupgrade
 ]
 ignore = [
-    "E501",  # line too long (handled by black)
+    "E501",  # line too long (handled by ruff format)
 ]
 
 [tool.mypy]
