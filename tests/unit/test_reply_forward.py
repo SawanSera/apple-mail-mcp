@@ -290,3 +290,101 @@ class TestReplyForwardSecurity:
         call_args = mock_run.call_args[0][0]
         # Should have escaped special characters
         assert '\\"' in call_args or "\\'" in call_args or "\\\\" in call_args
+
+
+class TestSaveDraft:
+    """Tests for saving draft emails."""
+
+    @patch.object(AppleMailConnector, "_run_applescript")
+    def test_save_draft_basic(
+        self, mock_run: MagicMock, connector: AppleMailConnector
+    ) -> None:
+        """Test saving a basic draft."""
+        mock_run.return_value = "99001"
+
+        result = connector.save_draft(
+            subject="Test Draft",
+            body="Hello there",
+            to=["customer@example.com"],
+            account="TestAccount",
+        )
+
+        assert result == "99001"
+        call_args = mock_run.call_args[0][0]
+        assert "Test Draft" in call_args
+        assert "Hello there" in call_args
+        assert "customer@example.com" in call_args
+        assert "save" in call_args.lower()
+
+    @patch.object(AppleMailConnector, "_run_applescript")
+    def test_save_draft_with_cc_bcc(
+        self, mock_run: MagicMock, connector: AppleMailConnector
+    ) -> None:
+        """Test saving a draft with CC and BCC recipients."""
+        mock_run.return_value = "99002"
+
+        result = connector.save_draft(
+            subject="Draft with CC",
+            body="Body text",
+            to=["to@example.com"],
+            account="TestAccount",
+            cc=["cc@example.com"],
+            bcc=["bcc@example.com"],
+        )
+
+        assert result == "99002"
+        call_args = mock_run.call_args[0][0]
+        assert "cc@example.com" in call_args
+        assert "bcc@example.com" in call_args
+
+    @patch.object(AppleMailConnector, "_run_applescript")
+    def test_save_draft_escapes_subject(
+        self, mock_run: MagicMock, connector: AppleMailConnector
+    ) -> None:
+        """Test that subject special characters are escaped."""
+        mock_run.return_value = "99003"
+
+        connector.save_draft(
+            subject='Subject with "quotes"',
+            body="Body",
+            to=["to@example.com"],
+            account="TestAccount",
+        )
+
+        call_args = mock_run.call_args[0][0]
+        assert '\\"' in call_args
+
+    @patch.object(AppleMailConnector, "_run_applescript")
+    def test_save_draft_escapes_body(
+        self, mock_run: MagicMock, connector: AppleMailConnector
+    ) -> None:
+        """Test that body special characters are escaped."""
+        mock_run.return_value = "99004"
+
+        connector.save_draft(
+            subject="Subject",
+            body='Body with "quotes" and \\backslash',
+            to=["to@example.com"],
+            account="TestAccount",
+        )
+
+        call_args = mock_run.call_args[0][0]
+        assert '\\"' in call_args or "\\\\" in call_args
+
+    @patch.object(AppleMailConnector, "_run_applescript")
+    def test_save_draft_multiple_recipients(
+        self, mock_run: MagicMock, connector: AppleMailConnector
+    ) -> None:
+        """Test saving a draft with multiple To recipients."""
+        mock_run.return_value = "99005"
+
+        connector.save_draft(
+            subject="Multi-recipient Draft",
+            body="Hello everyone",
+            to=["a@example.com", "b@example.com"],
+            account="TestAccount",
+        )
+
+        call_args = mock_run.call_args[0][0]
+        assert "a@example.com" in call_args
+        assert "b@example.com" in call_args

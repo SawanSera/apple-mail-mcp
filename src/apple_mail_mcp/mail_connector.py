@@ -205,18 +205,26 @@ class AppleMailConnector:
             status = "true" if read_status else "false"
             conditions.append(f"read status is {status}")
 
-        whose_clause = " and ".join(conditions) if conditions else "true"
+        whose_clause = " and ".join(conditions) if conditions else ""
         limit_clause = f"items 1 thru {limit} of" if limit else ""
+
+        if whose_clause:
+            fetch_expr = f"set matchedMessages to (messages of mailboxRef whose {whose_clause})"
+        else:
+            fetch_expr = f"set matchedMessages to {limit_clause} (messages of mailboxRef)"
+
+        limit_check = f"if msgCount >= {limit} then exit repeat\n                " if limit else ""
 
         script = f"""
         tell application "Mail"
             set accountRef to account "{account_safe}"
             set mailboxRef to mailbox "{mailbox_safe}" of accountRef
-            set matchedMessages to {limit_clause} (messages of mailboxRef whose {whose_clause})
+            {fetch_expr}
 
             set resultList to {{}}
+            set msgCount to 0
             repeat with msg in matchedMessages
-                set msgId to id of msg as text
+                {limit_check}set msgId to id of msg as text
                 set msgSubject to subject of msg
                 set msgSender to sender of msg
                 set msgDate to date received of msg as text
@@ -224,6 +232,7 @@ class AppleMailConnector:
 
                 set msgData to msgId & "|" & msgSubject & "|" & msgSender & "|" & msgDate & "|" & msgRead
                 set end of resultList to msgData
+                set msgCount to msgCount + 1
             end repeat
 
             -- Join with newlines
@@ -1005,6 +1014,72 @@ class AppleMailConnector:
             end repeat
 
             error "Message not found"
+        end tell
+        """
+
+        result = self._run_applescript(script)
+        return result
+
+    def save_draft(
+        self,
+        subject: str,
+        body: str,
+        to: list[str],
+        account: str,
+        cc: list[str] | None = None,
+        bcc: list[str] | None = None,
+    ) -> str:
+        """
+        Save a draft email to an account's Drafts folder.
+
+        Args:
+            subject: Email subject
+            body: Email body
+            to: List of To recipients
+            account: Account name to save draft in
+            cc: List of CC recipients (optional)
+            bcc: List of BCC recipients (optional)
+
+        Returns:
+            Message ID of the saved draft
+
+        Raises:
+            MailAppleScriptError: If save fails
+        """
+        subject_safe = escape_applescript_string(sanitize_input(subject))
+        body_safe = escape_applescript_string(sanitize_input(body))
+        account_safe = escape_applescript_string(sanitize_input(account))
+
+        to_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in to)
+        cc_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in (cc or []))
+        bcc_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in (bcc or []))
+
+        script = f"""
+        tell application "Mail"
+            set theAccount to account "{account_safe}"
+            set theMessage to make new outgoing message with properties {{subject:"{subject_safe}", content:"{body_safe}", visible:false}}
+
+            tell theMessage
+                repeat with addr in {{{to_list}}}
+                    make new to recipient with properties {{address:addr}}
+                end repeat
+
+                if "{cc_list}" is not "" then
+                    repeat with addr in {{{cc_list}}}
+                        make new cc recipient with properties {{address:addr}}
+                    end repeat
+                end if
+
+                if "{bcc_list}" is not "" then
+                    repeat with addr in {{{bcc_list}}}
+                        make new bcc recipient with properties {{address:addr}}
+                    end repeat
+                end if
+            end tell
+
+            save theMessage
+            set draftId to id of theMessage
+            return draftId as text
         end tell
         """
 

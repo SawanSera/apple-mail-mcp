@@ -1111,6 +1111,66 @@ def forward_message(
         }
 
 
+@mcp.tool()
+def save_draft(
+    subject: str,
+    body: str,
+    to: list[str],
+    account: str,
+    cc: list[str] | None = None,
+    bcc: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Save an email as a draft in Apple Mail.
+
+    Args:
+        subject: Email subject
+        body: Email body (plain text)
+        to: List of recipient email addresses
+        account: Account name to save draft in (e.g., "Ruwi's Cakes Hello")
+        cc: List of CC recipients (optional)
+        bcc: List of BCC recipients (optional)
+
+    Returns:
+        Dictionary with success status and draft message ID
+
+    Example:
+        save_draft(
+            subject="[CLAUDE DRAFT] Re: Cake enquiry",
+            body="Hi there, thanks for getting in touch!",
+            to=["customer@example.com"],
+            account="Ruwi's Cakes Hello",
+        )
+    """
+    try:
+        logger.info(f"Saving draft to account '{account}'")
+
+        draft_id = mail.save_draft(
+            subject=subject,
+            body=body,
+            to=to,
+            account=account,
+            cc=cc,
+            bcc=bcc,
+        )
+
+        return {
+            "success": True,
+            "draft_id": draft_id,
+            "subject": subject,
+            "to": to,
+            "account": account,
+        }
+
+    except Exception as e:
+        logger.error(f"Error saving draft: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": "unknown",
+        }
+
+
 def main() -> None:
     """Run the MCP server."""
     logger.info("Starting Apple Mail MCP server")
