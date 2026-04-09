@@ -302,12 +302,12 @@ def get_flag_index(color: str) -> int:
         -1
     """
     color_map = {
-        "none": -1,
-        "orange": 0,
-        "red": 1,
+        "none": 0,
+        "red": 0,
+        "orange": 1,
         "yellow": 2,
-        "blue": 3,
-        "green": 4,
+        "green": 3,
+        "blue": 4,
         "purple": 5,
         "gray": 6,
     }

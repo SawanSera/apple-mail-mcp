@@ -136,7 +136,7 @@ class TestFlagMessage:
         assert result == 1
         call_args = mock_run.call_args[0][0]
         assert "flag index" in call_args
-        assert "1" in call_args  # Red is index 1
+        assert "0" in call_args  # Red is index 0
 
     @patch.object(AppleMailConnector, "_run_applescript")
     def test_flag_with_none(
@@ -152,7 +152,7 @@ class TestFlagMessage:
 
         assert result == 1
         call_args = mock_run.call_args[0][0]
-        assert "-1" in call_args  # None is index -1
+        assert "0" in call_args  # None is index 0 (flagged status false clears the flag)
 
     @patch.object(AppleMailConnector, "_run_applescript")
     def test_flag_multiple_messages(
