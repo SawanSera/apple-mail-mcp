@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "apple-mail-mcp": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "apple_mail_mcp.server"],
+      "cwd": "/path/to/apple-mail-mcp"
+    }
+  }
+}
