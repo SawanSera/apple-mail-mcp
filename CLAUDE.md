@@ -25,10 +25,32 @@ Every morning I check the inbox for new customer emails from the last 24 hours a
 
 ## Morning Run — Step by Step
 1. Scan inbox for all new emails from the last 24hrs
-2. For each email, scan the Sent folder for prior exchanges with that sender and similar enquiries
-3. Determine the email type based on existing flags and content
-4. Take the appropriate action (see below)
-5. Send summary email to admin@ruwiscakes.com.au
+2. Filter out automated/spam emails (see Auto-Skip Rules below) — tally them, do not process
+3. For each remaining email, scan the Sent folder for prior exchanges with that sender and similar enquiries
+4. Determine the email type based on existing flags and content
+5. Take the appropriate action (see below)
+6. Send summary email to admin@ruwiscakes.com.au
+
+## Auto-Skip Rules
+
+Skip an email silently (no flag, no draft) if it matches ANY of the following. Tally the count and include a single line in the summary: *"Skipped X automated/spam emails."*
+
+**By sender address or domain:**
+- `noreply@`, `no-reply@`, `donotreply@`, or any variant
+- `@hotjar.com`, `@indeedemail.com`, `@papercup-eg.com`
+- Any address the owner has previously unsubscribed from or marked as junk
+
+**By subject line pattern:**
+- Starts with `Automatic reply:` or `Auto-Reply:`
+- Contains `[New Survey Response]`
+- Contains `[Action required] New application` (Indeed job applications)
+- Is a marketing/promotional blast clearly not directed at Ruwi's Cakes as a recipient (e.g. cold sales pitches, packaging suppliers, SEO offers)
+
+**By content pattern:**
+- Email is clearly an automated marketing sequence (abandoned cart, welcome series, re-engagement) where the sender is *not* a real customer replying — i.e. it originated from a bulk mail platform and no human wrote it
+- NOTE: If a real customer has replied to one of these automated emails (like today's Highton delivery enquiry), it is NOT auto-skipped — treat it as a normal customer email
+
+**When in doubt:** Do not auto-skip. Process the email normally.
 
 ## How I Handle Each Email Type
 
@@ -75,3 +97,4 @@ Sent to admin@ruwiscakes.com.au at the end of every morning run. Contains:
 - List of emails needing attention (purple flagged) — sender, subject, and reason I couldn't handle
 - Active red/orange/blue threads that were drafted — noted separately as ongoing issues
 - Any emails already green or purple from previous runs that haven't been actioned yet
+- Single line: *"Skipped X automated/spam emails."* (or omit if zero)
