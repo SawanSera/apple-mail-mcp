@@ -377,3 +377,47 @@ class TestMessageManagementSecurity:
 
         assert validate_flag_color("invalid") is False
         assert validate_flag_color("") is False
+
+    def test_mark_as_read_rejects_injected_id(self) -> None:
+        """Issue 3: mark_as_read must reject non-numeric message IDs."""
+        connector = AppleMailConnector()
+        with pytest.raises(ValueError, match="Invalid message ID"):
+            connector.mark_as_read(['12345" end tell -- inject'])
+
+    def test_delete_messages_rejects_injected_id(self) -> None:
+        """Issue 3: delete_messages must reject non-numeric message IDs."""
+        connector = AppleMailConnector()
+        with pytest.raises(ValueError, match="Invalid message ID"):
+            connector.delete_messages(['12345" end tell -- inject'])
+
+    def test_move_messages_rejects_injected_id(self) -> None:
+        """Issue 3: move_messages must reject non-numeric message IDs."""
+        connector = AppleMailConnector()
+        with pytest.raises(ValueError, match="Invalid message ID"):
+            connector.move_messages(
+                message_ids=['12345" end tell -- inject'],
+                destination_mailbox="Archive",
+                account="Gmail",
+            )
+
+    def test_flag_message_rejects_injected_id(self) -> None:
+        """Issue 3: flag_message must reject non-numeric message IDs."""
+        connector = AppleMailConnector()
+        with pytest.raises(ValueError, match="Invalid message ID"):
+            connector.flag_message(
+                message_ids=['12345" end tell -- inject'],
+                flag_color="red",
+            )
+
+    @patch.object(AppleMailConnector, "_run_applescript")
+    def test_id_list_contains_only_digits(self, mock_run: MagicMock) -> None:
+        """Issue 3: ID list embedded in AppleScript must be bare integers."""
+        mock_run.return_value = "2"
+        connector = AppleMailConnector()
+        connector.mark_as_read(["12345", "67890"])
+        script = mock_run.call_args[0][0]
+        # IDs must appear as bare integers — no quotes around them
+        assert "12345" in script
+        assert "67890" in script
+        # The list should not have quoted IDs like {"12345"}
+        assert '"12345"' not in script

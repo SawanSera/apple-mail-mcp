@@ -14,7 +14,7 @@ from .exceptions import (
     MailMailboxNotFoundError,
     MailMessageNotFoundError,
 )
-from .utils import escape_applescript_string, sanitize_input
+from .utils import escape_applescript_string, sanitize_input, sanitize_message_id
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +230,7 @@ class AppleMailConnector:
                 set msgDate to date received of msg as text
                 set msgRead to read status of msg
 
-                set msgData to msgId & "|" & msgSubject & "|" & msgSender & "|" & msgDate & "|" & msgRead
+                set msgData to msgId & (ASCII character 31) & msgSubject & (ASCII character 31) & msgSender & (ASCII character 31) & msgDate & (ASCII character 31) & msgRead
                 set end of resultList to msgData
                 set msgCount to msgCount + 1
             end repeat
@@ -252,7 +252,7 @@ class AppleMailConnector:
             for line in result.split("\n"):
                 if not line:
                     continue
-                parts = line.split("|")
+                parts = line.split("\x1f")
                 if len(parts) >= 5:
                     messages.append({
                         "id": parts[0],
@@ -302,7 +302,7 @@ class AppleMailConnector:
                         set msgFlagged to flagged status of msg
                         {content_clause}
 
-                        return msgId & "|" & msgSubject & "|" & msgSender & "|" & msgDate & "|" & msgRead & "|" & msgFlagged & "|" & msgContent
+                        return msgId & (ASCII character 31) & msgSubject & (ASCII character 31) & msgSender & (ASCII character 31) & msgDate & (ASCII character 31) & msgRead & (ASCII character 31) & msgFlagged & (ASCII character 31) & msgContent
                     end try
                 end repeat
             end repeat
@@ -314,7 +314,7 @@ class AppleMailConnector:
         result = self._run_applescript(script)
 
         # Parse result
-        parts = result.split("|", 6)  # Max 7 parts
+        parts = result.split("\x1f", 6)  # Max 7 parts
         if len(parts) >= 6:
             return {
                 "id": parts[0],
@@ -409,8 +409,9 @@ class AppleMailConnector:
 
         status = "true" if read else "false"
 
-        # Build list of IDs
-        id_list = ", ".join(message_ids)
+        # Validate and sanitize each ID — Apple Mail IDs are integers
+        safe_ids = [sanitize_message_id(mid) for mid in message_ids]
+        id_list = ", ".join(safe_ids)
 
         script = f"""
         tell application "Mail"
@@ -568,7 +569,7 @@ class AppleMailConnector:
                             set attSize to file size of att
                             set attDownloaded to downloaded of att
 
-                            set attData to attName & "|" & attType & "|" & attSize & "|" & attDownloaded
+                            set attData to attName & (ASCII character 31) & attType & (ASCII character 31) & attSize & (ASCII character 31) & attDownloaded
                             set end of resultList to attData
                         end repeat
 
@@ -594,7 +595,7 @@ class AppleMailConnector:
             for line in result.split("\n"):
                 if not line:
                     continue
-                parts = line.split("|")
+                parts = line.split("\x1f")
                 if len(parts) >= 4:
                     attachments.append({
                         "name": parts[0],
@@ -634,12 +635,11 @@ class AppleMailConnector:
         if not save_directory.is_dir():
             raise ValueError(f"Save path is not a directory: {save_directory}")
 
-        # Prevent path traversal
+        # Prevent path traversal — check parts before resolve() eliminates ".."
+        if ".." in save_directory.parts:
+            raise ValueError("Path traversal detected")
         try:
             save_directory = save_directory.resolve()
-            # Check for suspicious paths
-            if ".." in str(save_directory):
-                raise ValueError("Path traversal detected")
         except (RuntimeError, OSError) as e:
             raise ValueError(f"Invalid save directory: {e}")
 
@@ -667,6 +667,13 @@ class AppleMailConnector:
                         repeat with att in attList
                             try
                                 set attName to name of att
+                                -- Strip path separators to prevent directory traversal
+                                set AppleScript's text item delimiters to "/"
+                                set attName to last text item of attName
+                                set AppleScript's text item delimiters to ""
+                                if attName is ".." or attName is "." or attName is "" then
+                                    set attName to "unnamed_attachment"
+                                end if
                                 save att in ("{dir_safe}/" & attName)
                                 set saveCount to saveCount + 1
                             end try
@@ -714,7 +721,8 @@ class AppleMailConnector:
 
         account_safe = escape_applescript_string(sanitize_input(account))
         mailbox_safe = escape_applescript_string(sanitize_input(destination_mailbox))
-        id_list = ", ".join(message_ids)
+        safe_ids = [sanitize_message_id(mid) for mid in message_ids]
+        id_list = ", ".join(safe_ids)
 
         if gmail_mode:
             # Gmail requires copy + delete approach to properly handle labels
@@ -797,7 +805,8 @@ class AppleMailConnector:
 
         flag_index = get_flag_index(flag_color)
         flagged_status = "true" if flag_color != "none" else "false"
-        id_list = ", ".join(message_ids)
+        safe_ids = [sanitize_message_id(mid) for mid in message_ids]
+        id_list = ", ".join(safe_ids)
 
         script = f"""
         tell application "Mail"
@@ -908,7 +917,8 @@ class AppleMailConnector:
                 "Maximum is 100 without skip_bulk_check=True"
             )
 
-        id_list = ", ".join(message_ids)
+        safe_ids = [sanitize_message_id(mid) for mid in message_ids]
+        id_list = ", ".join(safe_ids)
 
         if permanent:
             # Permanent delete (not recommended, requires extra caution)
@@ -982,6 +992,7 @@ class AppleMailConnector:
         """
         from .utils import sanitize_input
 
+        message_id_safe = sanitize_message_id(message_id)
         body_safe = escape_applescript_string(sanitize_input(body))
         reply_type = "reply to all" if reply_all else "reply"
 
@@ -989,12 +1000,12 @@ class AppleMailConnector:
         # We'll create a reply and set its content
         script = f"""
         tell application "Mail"
-            set idList to {{"{message_id}"}}
+            set idList to {{{message_id_safe}}}
 
             repeat with acc in accounts
                 repeat with mb in mailboxes of acc
                     try
-                        set origMsg to first message of mb whose id is "{message_id}"
+                        set origMsg to first message of mb whose id is {message_id_safe}
 
                         -- Create reply message
                         set replyMsg to {reply_type} origMsg
@@ -1054,10 +1065,25 @@ class AppleMailConnector:
         cc_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in (cc or []))
         bcc_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in (bcc or []))
 
+        # Resolve the account's email address first so we can set it as sender.
+        # Setting sender routes the draft to the correct account's Drafts folder.
+        email_script = f"""
+        tell application "Mail"
+            set acc to account "{account_safe}"
+            set accInfo to {{emails:(email addresses of acc)}}
+            set output to ""
+            repeat with addr in emails of accInfo
+                set output to "" & addr
+                exit repeat
+            end repeat
+            return output
+        end tell
+        """
+        sender_email = self._run_applescript(email_script).strip()
+
         script = f"""
         tell application "Mail"
-            set theAccount to account "{account_safe}"
-            set theMessage to make new outgoing message with properties {{subject:"{subject_safe}", content:"{body_safe}", visible:false}}
+            set theMessage to make new outgoing message with properties {{subject:"{subject_safe}", content:"{body_safe}", visible:false, sender:"{sender_email}"}}
 
             tell theMessage
                 repeat with addr in {{{to_list}}}
@@ -1133,6 +1159,7 @@ class AppleMailConnector:
                 if not validate_email(email):
                     raise ValueError(f"Invalid BCC email address: {email}")
 
+        message_id_safe = sanitize_message_id(message_id)
         body_safe = escape_applescript_string(sanitize_input(body))
         to_list = format_applescript_list(to)
         cc_list = format_applescript_list(cc) if cc else '""'
@@ -1143,7 +1170,7 @@ class AppleMailConnector:
             repeat with acc in accounts
                 repeat with mb in mailboxes of acc
                     try
-                        set origMsg to first message of mb whose id is "{message_id}"
+                        set origMsg to first message of mb whose id is {message_id_safe}
 
                         -- Create forward message
                         set fwdMsg to forward origMsg

@@ -3,8 +3,12 @@ Security utilities for Apple Mail MCP.
 """
 
 import logging
+import subprocess
+import threading
+import time
+from collections import defaultdict
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 
 from .exceptions import MailOperationCancelledError
 from .utils import validate_email
@@ -51,46 +55,170 @@ class OperationLogger:
         return self.operations[-limit:]
 
 
-# Global operation logger instance
+class RateLimiter:
+    """Sliding-window per-operation rate limiter."""
+
+    def __init__(self) -> None:
+        self._timestamps: dict[str, list[float]] = defaultdict(list)
+        self._lock = threading.Lock()
+
+    def check(
+        self,
+        operation: str,
+        window_seconds: int = 60,
+        max_operations: int = 10,
+    ) -> bool:
+        """
+        Check whether an operation is within its rate limit.
+
+        Records the attempt if allowed. Evicts timestamps outside the
+        sliding window before checking, so the limit rolls naturally.
+
+        Args:
+            operation: Operation name
+            window_seconds: Size of the sliding window
+            max_operations: Maximum calls allowed within the window
+
+        Returns:
+            True if the operation is allowed, False if rate-limited.
+        """
+        now = time.monotonic()
+        cutoff = now - window_seconds
+
+        with self._lock:
+            # Evict timestamps that have fallen outside the window
+            self._timestamps[operation] = [
+                ts for ts in self._timestamps[operation] if ts > cutoff
+            ]
+
+            if len(self._timestamps[operation]) >= max_operations:
+                logger.warning(
+                    f"Rate limit exceeded for '{operation}': "
+                    f"{len(self._timestamps[operation])} calls in "
+                    f"{window_seconds}s (max {max_operations})"
+                )
+                return False
+
+            self._timestamps[operation].append(now)
+            return True
+
+    def reset(self, operation: str | None = None) -> None:
+        """Reset rate limit counters (used in tests)."""
+        with self._lock:
+            if operation:
+                self._timestamps.pop(operation, None)
+            else:
+                self._timestamps.clear()
+
+
+# Global singletons
 operation_logger = OperationLogger()
+rate_limiter = RateLimiter()
+
+
+def rate_limit_check(
+    operation: str, window_seconds: int = 60, max_operations: int = 10
+) -> bool:
+    """
+    Check the rate limit for an operation using the global rate limiter.
+
+    Args:
+        operation: Operation name
+        window_seconds: Sliding window size in seconds
+        max_operations: Maximum allowed calls within the window
+
+    Returns:
+        True if allowed, False if rate-limited
+    """
+    return rate_limiter.check(operation, window_seconds, max_operations)
+
+
+def _show_confirmation_dialog(operation: str, details: dict[str, Any]) -> bool:
+    """
+    Show a native macOS confirmation dialog via osascript.
+
+    Args:
+        operation: Operation name shown in the dialog title
+        details: Key-value pairs shown in the dialog body
+
+    Returns:
+        True if user clicked Confirm, False if cancelled or timed out.
+    """
+    lines = [f"Apple Mail MCP wants to perform: {operation}", ""]
+    for key, value in details.items():
+        if isinstance(value, list):
+            lines.append(f"  {key}: {', '.join(str(v) for v in value)}")
+        elif value:
+            lines.append(f"  {key}: {value}")
+    summary = "\n".join(lines[:10])  # cap dialog length
+
+    # Escape for AppleScript string literal
+    safe_summary = summary.replace("\\", "\\\\").replace('"', '\\"')
+    script = (
+        f'display dialog "{safe_summary}" '
+        f'buttons {{"Cancel", "Confirm"}} '
+        f'default button "Cancel" '
+        f'with title "Apple Mail MCP \u2014 Confirm Action" '
+        f'with icon caution'
+    )
+
+    try:
+        result = subprocess.run(
+            ["/usr/bin/osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        return result.returncode == 0 and "Confirm" in result.stdout
+    except subprocess.TimeoutExpired:
+        logger.warning("Confirmation dialog timed out — treating as cancelled")
+        return False
+
+
+# Injectable handler — swap out in tests via set_confirmation_handler()
+_confirmation_handler: Callable[[str, dict[str, Any]], bool] = _show_confirmation_dialog
+
+
+def set_confirmation_handler(
+    handler: Callable[[str, dict[str, Any]], bool],
+) -> None:
+    """
+    Replace the confirmation handler (for testing or alternative UIs).
+
+    Args:
+        handler: Callable(operation, details) -> bool
+                 Return True to approve, False to cancel.
+    """
+    global _confirmation_handler
+    _confirmation_handler = handler
+
+
+def reset_confirmation_handler() -> None:
+    """Restore the default osascript confirmation handler."""
+    global _confirmation_handler
+    _confirmation_handler = _show_confirmation_dialog
 
 
 def require_confirmation(operation: str, details: dict[str, Any]) -> bool:
     """
-    Request user confirmation for sensitive operations.
+    Request user confirmation for a sensitive operation.
+
+    Shows a native macOS dialog (or the injected handler in tests).
+    Returns False on timeout, dialog error, or user cancellation.
 
     Args:
         operation: Operation name
-        details: Operation details to show user
+        details: Operation details to display
 
     Returns:
-        True if confirmed, False otherwise
-
-    Raises:
-        MailOperationCancelledError: If user cancels
+        True if confirmed, False otherwise.
     """
-    # In a real implementation, this would:
-    # 1. Show a confirmation dialog
-    # 2. Display operation details
-    # 3. Wait for user approval
-    #
-    # For MCP, this is typically handled by the client (Claude Desktop)
-    # by including operation details in the response and requiring
-    # explicit user action.
-    #
-    # For now, we'll log the request and return True for testing.
-    # Production should implement proper confirmation flow.
-
     logger.warning(f"Confirmation requested for: {operation}")
-    logger.warning(f"Details: {details}")
-
-    # TODO: Implement proper confirmation mechanism
-    # This could be:
-    # - Return special MCP response that requires user confirmation
-    # - Show system dialog (osascript -e 'display dialog ...')
-    # - Use callback mechanism
-
-    return True
+    try:
+        return _confirmation_handler(operation, details)
+    except Exception as e:
+        logger.error(f"Confirmation handler error: {e} — treating as cancelled")
+        return False
 
 
 def validate_send_operation(
@@ -107,18 +235,15 @@ def validate_send_operation(
     Returns:
         Tuple of (is_valid, error_message)
     """
-    # Check for recipients
     if not to:
         return False, "At least one 'to' recipient is required"
 
-    # Validate all email addresses
     all_recipients = to + (cc or []) + (bcc or [])
     invalid_emails = [email for email in all_recipients if not validate_email(email)]
 
     if invalid_emails:
         return False, f"Invalid email addresses: {', '.join(invalid_emails)}"
 
-    # Check for reasonable limits (prevent spam)
     max_recipients = 100
     if len(all_recipients) > max_recipients:
         return False, f"Too many recipients (max: {max_recipients})"
@@ -146,31 +271,6 @@ def validate_bulk_operation(item_count: int, max_items: int = 100) -> tuple[bool
     return True, ""
 
 
-def rate_limit_check(operation: str, window_seconds: int = 60, max_operations: int = 10) -> bool:
-    """
-    Check if operation should be rate limited.
-
-    Args:
-        operation: Operation name
-        window_seconds: Time window in seconds
-        max_operations: Maximum operations in window
-
-    Returns:
-        True if allowed, False if rate limited
-    """
-    # TODO: Implement actual rate limiting with timing
-    # For now, just log and return True
-
-    recent_ops = [
-        op for op in operation_logger.operations if op["operation"] == operation
-    ]
-
-    if len(recent_ops) > max_operations:
-        logger.warning(f"Rate limit check for {operation}: {len(recent_ops)} recent operations")
-
-    return True
-
-
 def validate_attachment_type(filename: str, allow_executables: bool = False) -> bool:
     """
     Validate attachment file type for security.
@@ -188,7 +288,6 @@ def validate_attachment_type(filename: str, allow_executables: bool = False) -> 
         >>> validate_attachment_type("malware.exe")
         False
     """
-    # Dangerous executable extensions (block by default)
     dangerous_extensions = {
         '.exe', '.bat', '.cmd', '.com', '.scr', '.pif',
         '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh',
@@ -198,13 +297,10 @@ def validate_attachment_type(filename: str, allow_executables: bool = False) -> 
     }
 
     filename_lower = filename.lower()
-
-    # Check for dangerous extensions
     for ext in dangerous_extensions:
         if filename_lower.endswith(ext):
             return allow_executables
 
-    # All other types are allowed
     return True
 
 

@@ -1,9 +1,18 @@
 """Unit tests for security module."""
 
+import logging
+import time
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from apple_mail_mcp.security import (
     OperationLogger,
+    RateLimiter,
+    rate_limit_check,
+    require_confirmation,
+    reset_confirmation_handler,
+    set_confirmation_handler,
     validate_bulk_operation,
     validate_send_operation,
 )
@@ -88,3 +97,287 @@ class TestValidateBulkOperation:
     def test_exactly_max_items(self) -> None:
         is_valid, error = validate_bulk_operation(100, max_items=100)
         assert is_valid is True
+
+
+class TestBccPrivacy:
+    """Issue 9: BCC recipients must not appear in log output."""
+
+    def test_send_email_does_not_log_bcc(self) -> None:
+        from apple_mail_mcp.mail_connector import AppleMailConnector
+        from apple_mail_mcp import server
+
+        with patch.object(AppleMailConnector, "_run_applescript", return_value="sent"):
+            with patch.object(server.logger, "info") as mock_log:
+                server.send_email(
+                    subject="Test",
+                    body="Body",
+                    to=["to@example.com"],
+                    bcc=["secret@example.com"],
+                )
+
+        logged_messages = " ".join(str(c) for c in mock_log.call_args_list)
+        assert "secret@example.com" not in logged_messages
+
+
+class TestSaveDraftValidation:
+    """Issue 10: save_draft must validate recipient email addresses."""
+
+    def test_save_draft_rejects_invalid_email(self) -> None:
+        from apple_mail_mcp import server
+
+        result = server.save_draft(
+            subject="Draft",
+            body="Body",
+            to=["not-an-email"],
+            account="TestAccount",
+        )
+
+        assert result["success"] is False
+        assert result["error_type"] == "validation_error"
+
+    def test_save_draft_rejects_empty_recipients(self) -> None:
+        from apple_mail_mcp import server
+
+        result = server.save_draft(
+            subject="Draft",
+            body="Body",
+            to=[],
+            account="TestAccount",
+        )
+
+        assert result["success"] is False
+        assert result["error_type"] == "validation_error"
+
+    def test_save_draft_accepts_valid_email(self) -> None:
+        from unittest.mock import patch
+        from apple_mail_mcp.mail_connector import AppleMailConnector
+        from apple_mail_mcp import server
+
+        with patch.object(AppleMailConnector, "_run_applescript", return_value="draft-id-123"):
+            result = server.save_draft(
+                subject="Draft",
+                body="Body",
+                to=["valid@example.com"],
+                account="TestAccount",
+            )
+
+        assert result["success"] is True
+
+
+class TestRateLimiter:
+    """Issue 5: sliding-window rate limiter must enforce operation limits."""
+
+    def test_allows_operations_within_limit(self) -> None:
+        limiter = RateLimiter()
+        for _ in range(5):
+            assert limiter.check("op", window_seconds=60, max_operations=10) is True
+
+    def test_blocks_after_limit_reached(self) -> None:
+        limiter = RateLimiter()
+        for _ in range(10):
+            limiter.check("op", window_seconds=60, max_operations=10)
+        assert limiter.check("op", window_seconds=60, max_operations=10) is False
+
+    def test_different_operations_have_independent_limits(self) -> None:
+        limiter = RateLimiter()
+        for _ in range(10):
+            limiter.check("send", window_seconds=60, max_operations=10)
+        # A different operation must not be affected
+        assert limiter.check("delete", window_seconds=60, max_operations=10) is True
+
+    def test_limit_resets_after_window_expires(self) -> None:
+        limiter = RateLimiter()
+        for _ in range(3):
+            limiter.check("op", window_seconds=1, max_operations=3)
+        assert limiter.check("op", window_seconds=1, max_operations=3) is False
+
+        # Wait for window to expire
+        time.sleep(1.1)
+        assert limiter.check("op", window_seconds=1, max_operations=3) is True
+
+    def test_reset_clears_specific_operation(self) -> None:
+        limiter = RateLimiter()
+        for _ in range(10):
+            limiter.check("op", window_seconds=60, max_operations=10)
+        assert limiter.check("op", window_seconds=60, max_operations=10) is False
+
+        limiter.reset("op")
+        assert limiter.check("op", window_seconds=60, max_operations=10) is True
+
+    def test_global_rate_limit_check_function(self) -> None:
+        """rate_limit_check() must use the global rate_limiter instance."""
+        from apple_mail_mcp.security import rate_limiter
+        rate_limiter.reset("global_test_op")
+        for _ in range(3):
+            assert rate_limit_check("global_test_op", window_seconds=60, max_operations=3) is True
+        assert rate_limit_check("global_test_op", window_seconds=60, max_operations=3) is False
+        rate_limiter.reset("global_test_op")
+
+
+class TestRequireConfirmation:
+    """Issue 4: require_confirmation must use an injectable handler (not a stub)."""
+
+    def teardown_method(self) -> None:
+        reset_confirmation_handler()
+
+    def test_calls_injected_handler(self) -> None:
+        handler = MagicMock(return_value=True)
+        set_confirmation_handler(handler)
+
+        result = require_confirmation("send_email", {"subject": "Test"})
+
+        handler.assert_called_once_with("send_email", {"subject": "Test"})
+        assert result is True
+
+    def test_returns_false_when_handler_cancels(self) -> None:
+        set_confirmation_handler(lambda op, details: False)
+        assert require_confirmation("send_email", {}) is False
+
+    def test_returns_false_when_handler_raises(self) -> None:
+        def failing_handler(op: str, details: dict) -> bool:
+            raise RuntimeError("dialog failed")
+
+        set_confirmation_handler(failing_handler)
+        assert require_confirmation("send_email", {}) is False
+
+    def test_reset_restores_default_handler(self) -> None:
+        set_confirmation_handler(lambda op, details: True)
+        reset_confirmation_handler()
+
+        # After reset, the handler should be the real osascript one.
+        # We can't call it in tests, so just verify set/reset cycle works.
+        from apple_mail_mcp.security import _confirmation_handler, _show_confirmation_dialog
+        assert _confirmation_handler is _show_confirmation_dialog
+
+
+class TestServerRateLimiting:
+    """Issue 5: rate limits must be enforced in server-level tools."""
+
+    def setup_method(self) -> None:
+        from apple_mail_mcp.security import rate_limiter
+        # Clear rate limit state before each test
+        rate_limiter.reset()
+        # Auto-approve confirmations
+        set_confirmation_handler(lambda op, details: True)
+
+    def teardown_method(self) -> None:
+        from apple_mail_mcp.security import rate_limiter
+        rate_limiter.reset()
+        reset_confirmation_handler()
+
+    def test_send_email_rate_limited_after_10_calls(self) -> None:
+        from apple_mail_mcp.mail_connector import AppleMailConnector
+        from apple_mail_mcp import server
+
+        with patch.object(AppleMailConnector, "_run_applescript", return_value="sent"):
+            for _ in range(10):
+                server.send_email(subject="S", body="B", to=["a@example.com"])
+
+            result = server.send_email(subject="S", body="B", to=["a@example.com"])
+
+        assert result["success"] is False
+        assert result["error_type"] == "rate_limited"
+
+    def test_delete_messages_rate_limited_after_5_calls(self) -> None:
+        from apple_mail_mcp.mail_connector import AppleMailConnector
+        from apple_mail_mcp import server
+
+        with patch.object(AppleMailConnector, "_run_applescript", return_value="1"):
+            for _ in range(5):
+                server.delete_messages(message_ids=["12345"])
+
+            result = server.delete_messages(message_ids=["12345"])
+
+        assert result["success"] is False
+        assert result["error_type"] == "rate_limited"
+
+
+class TestServerConfirmation:
+    """Issue 6: reply/forward/delete must require confirmation before acting."""
+
+    def setup_method(self) -> None:
+        from apple_mail_mcp.security import rate_limiter
+        rate_limiter.reset()
+
+    def teardown_method(self) -> None:
+        from apple_mail_mcp.security import rate_limiter
+        rate_limiter.reset()
+        reset_confirmation_handler()
+
+    def test_reply_cancelled_when_user_denies(self) -> None:
+        from apple_mail_mcp import server
+        set_confirmation_handler(lambda op, details: False)
+
+        result = server.reply_to_message(message_id="12345", body="Hi")
+
+        assert result["success"] is False
+        assert result["error_type"] == "cancelled"
+
+    def test_forward_cancelled_when_user_denies(self) -> None:
+        from apple_mail_mcp import server
+        set_confirmation_handler(lambda op, details: False)
+
+        result = server.forward_message(
+            message_id="12345", to=["a@example.com"]
+        )
+
+        assert result["success"] is False
+        assert result["error_type"] == "cancelled"
+
+    def test_delete_cancelled_when_user_denies(self) -> None:
+        from apple_mail_mcp import server
+        set_confirmation_handler(lambda op, details: False)
+
+        result = server.delete_messages(message_ids=["12345"])
+
+        assert result["success"] is False
+        assert result["error_type"] == "cancelled"
+
+    def test_reply_proceeds_when_user_confirms(self) -> None:
+        from apple_mail_mcp.mail_connector import AppleMailConnector
+        from apple_mail_mcp import server
+        set_confirmation_handler(lambda op, details: True)
+
+        with patch.object(AppleMailConnector, "_run_applescript", return_value="67890"):
+            result = server.reply_to_message(message_id="12345", body="Hi")
+
+        assert result["success"] is True
+
+    def test_forward_proceeds_when_user_confirms(self) -> None:
+        from apple_mail_mcp.mail_connector import AppleMailConnector
+        from apple_mail_mcp import server
+        set_confirmation_handler(lambda op, details: True)
+
+        with patch.object(AppleMailConnector, "_run_applescript", return_value="67890"):
+            result = server.forward_message(
+                message_id="12345", to=["a@example.com"]
+            )
+
+        assert result["success"] is True
+
+    def test_delete_proceeds_when_user_confirms(self) -> None:
+        from apple_mail_mcp.mail_connector import AppleMailConnector
+        from apple_mail_mcp import server
+        set_confirmation_handler(lambda op, details: True)
+
+        with patch.object(AppleMailConnector, "_run_applescript", return_value="1"):
+            result = server.delete_messages(message_ids=["12345"])
+
+        assert result["success"] is True
+
+    def test_confirmation_receives_operation_details(self) -> None:
+        """Confirmation handler must receive meaningful context, not an empty dict."""
+        from apple_mail_mcp import server
+        received: dict = {}
+
+        def capture(op: str, details: dict) -> bool:
+            received["op"] = op
+            received["details"] = details
+            return False
+
+        set_confirmation_handler(capture)
+        server.delete_messages(message_ids=["12345"], permanent=True)
+
+        assert received["op"] == "delete_messages"
+        assert received["details"]["count"] == 1
+        assert received["details"]["permanent"] is True

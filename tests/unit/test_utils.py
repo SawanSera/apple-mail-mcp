@@ -8,6 +8,7 @@ from apple_mail_mcp.utils import (
     parse_applescript_list,
     parse_date_filter,
     sanitize_input,
+    sanitize_message_id,
     validate_email,
 )
 
@@ -126,3 +127,37 @@ class TestSanitizeInput:
         long_string = "a" * 20000
         result = sanitize_input(long_string)
         assert len(result) == 10000
+
+
+class TestSanitizeMessageId:
+    """Tests for sanitize_message_id — injection prevention."""
+
+    def test_valid_integer_id(self) -> None:
+        assert sanitize_message_id("12345") == "12345"
+
+    def test_strips_leading_trailing_whitespace(self) -> None:
+        assert sanitize_message_id("  12345  ") == "12345"
+
+    def test_rejects_injection_with_quote(self) -> None:
+        with pytest.raises(ValueError):
+            sanitize_message_id('12345" end tell')
+
+    def test_rejects_injection_with_backslash(self) -> None:
+        with pytest.raises(ValueError):
+            sanitize_message_id("12345\\n evil code")
+
+    def test_rejects_injection_with_space(self) -> None:
+        with pytest.raises(ValueError):
+            sanitize_message_id("123 45")
+
+    def test_rejects_alpha_chars(self) -> None:
+        with pytest.raises(ValueError):
+            sanitize_message_id("abc123")
+
+    def test_rejects_empty_string(self) -> None:
+        with pytest.raises(ValueError):
+            sanitize_message_id("")
+
+    def test_rejects_negative_sign(self) -> None:
+        with pytest.raises(ValueError):
+            sanitize_message_id("-12345")

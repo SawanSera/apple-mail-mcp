@@ -291,6 +291,63 @@ class TestReplyForwardSecurity:
         # Should have escaped special characters
         assert '\\"' in call_args or "\\'" in call_args or "\\\\" in call_args
 
+    def test_reply_rejects_injected_message_id(
+        self, connector: AppleMailConnector
+    ) -> None:
+        """Issue 1: reply_to_message must reject non-numeric message IDs."""
+        with pytest.raises(ValueError, match="Invalid message ID"):
+            connector.reply_to_message(
+                message_id='12345" end tell -- inject',
+                body="body",
+                reply_all=False,
+            )
+
+    def test_forward_rejects_injected_message_id(
+        self, connector: AppleMailConnector
+    ) -> None:
+        """Issue 2: forward_message must reject non-numeric message IDs."""
+        with pytest.raises(ValueError, match="Invalid message ID"):
+            connector.forward_message(
+                message_id='12345" end tell -- inject',
+                to=["safe@example.com"],
+                body="body",
+            )
+
+    @patch.object(AppleMailConnector, "_run_applescript")
+    def test_reply_message_id_not_quoted_in_script(
+        self, mock_run: MagicMock, connector: AppleMailConnector
+    ) -> None:
+        """Issue 1: message_id must appear as bare integer in AppleScript (no quotes)."""
+        mock_run.return_value = "67890"
+
+        connector.reply_to_message(
+            message_id="12345",
+            body="body",
+            reply_all=False,
+        )
+
+        script = mock_run.call_args[0][0]
+        # Must NOT appear as a quoted string — bare integer is safe and correct
+        assert '"12345"' not in script
+        assert "12345" in script
+
+    @patch.object(AppleMailConnector, "_run_applescript")
+    def test_forward_message_id_not_quoted_in_script(
+        self, mock_run: MagicMock, connector: AppleMailConnector
+    ) -> None:
+        """Issue 2: message_id must appear as bare integer in AppleScript (no quotes)."""
+        mock_run.return_value = "67890"
+
+        connector.forward_message(
+            message_id="12345",
+            to=["safe@example.com"],
+            body="body",
+        )
+
+        script = mock_run.call_args[0][0]
+        assert '"12345"' not in script
+        assert "12345" in script
+
 
 class TestSaveDraft:
     """Tests for saving draft emails."""

@@ -232,6 +232,36 @@ def sanitize_mailbox_name(name: str) -> str:
     return name
 
 
+def sanitize_message_id(message_id: str) -> str:
+    """
+    Validate and sanitize a message ID for safe use in AppleScript.
+
+    Apple Mail message IDs are positive integers. Any non-numeric value
+    is rejected to prevent AppleScript injection via crafted IDs.
+
+    Args:
+        message_id: Message ID to validate
+
+    Returns:
+        Sanitized message ID string (digits only)
+
+    Raises:
+        ValueError: If message_id contains non-numeric characters
+
+    Example:
+        >>> sanitize_message_id("12345")
+        '12345'
+        >>> sanitize_message_id('12345" end tell')
+        ValueError: Invalid message ID ...
+    """
+    sanitized = sanitize_input(message_id).strip()
+    if not re.match(r'^\d+$', sanitized):
+        raise ValueError(
+            f"Invalid message ID: must be a positive integer, got {message_id!r}"
+        )
+    return sanitized
+
+
 def validate_flag_color(color: str) -> bool:
     """
     Validate flag color name.

@@ -93,7 +93,8 @@ class TestAppleMailConnector:
         self, mock_run: MagicMock, connector: AppleMailConnector
     ) -> None:
         """Test basic message search."""
-        mock_run.return_value = "12345|Test Subject|sender@example.com|Mon Jan 1 2024|false"
+        sep = "\x1f"
+        mock_run.return_value = f"12345{sep}Test Subject{sep}sender@example.com{sep}Mon Jan 1 2024{sep}false"
 
         result = connector.search_messages("Gmail", "INBOX")
 
@@ -131,7 +132,8 @@ class TestAppleMailConnector:
         self, mock_run: MagicMock, connector: AppleMailConnector
     ) -> None:
         """Test getting a message."""
-        mock_run.return_value = "12345|Subject|sender@example.com|Mon Jan 1 2024|true|false|Message body"
+        sep = "\x1f"
+        mock_run.return_value = f"12345{sep}Subject{sep}sender@example.com{sep}Mon Jan 1 2024{sep}true{sep}false{sep}Message body"
 
         result = connector.get_message("12345", include_content=True)
 
@@ -209,3 +211,47 @@ class TestAppleMailConnector:
         """Test marking with empty list."""
         result = connector.mark_as_read([])
         assert result == 0
+
+    @patch.object(AppleMailConnector, "_run_applescript")
+    def test_search_messages_pipe_in_subject_parses_correctly(
+        self, mock_run: MagicMock, connector: AppleMailConnector
+    ) -> None:
+        """Issue 11: subject containing '|' must not corrupt field parsing."""
+        sep = "\x1f"
+        # Subject contains a literal pipe — should not split subject field
+        mock_run.return_value = (
+            f"12345{sep}Subject with | pipe{sep}sender@example.com{sep}Mon Jan 1 2024{sep}false"
+        )
+
+        result = connector.search_messages("Gmail", "INBOX")
+
+        assert len(result) == 1
+        assert result[0]["subject"] == "Subject with | pipe"
+        assert result[0]["sender"] == "sender@example.com"
+
+    @patch.object(AppleMailConnector, "_run_applescript")
+    def test_get_message_pipe_in_body_parses_correctly(
+        self, mock_run: MagicMock, connector: AppleMailConnector
+    ) -> None:
+        """Issue 11: message body containing '|' must not corrupt field parsing."""
+        sep = "\x1f"
+        mock_run.return_value = (
+            f"12345{sep}Subject{sep}sender@example.com{sep}Mon Jan 1 2024{sep}true{sep}false{sep}Body with | pipes | here"
+        )
+
+        result = connector.get_message("12345")
+
+        assert result["subject"] == "Subject"
+        assert result["content"] == "Body with | pipes | here"
+
+    @patch.object(AppleMailConnector, "_run_applescript")
+    def test_search_uses_unit_separator_in_script(
+        self, mock_run: MagicMock, connector: AppleMailConnector
+    ) -> None:
+        """Issue 11: AppleScript must use ASCII 31 (unit separator) not pipe."""
+        mock_run.return_value = ""
+        connector.search_messages("Gmail", "INBOX")
+        script = mock_run.call_args[0][0]
+        assert "ASCII character 31" in script
+        # Must NOT use plain pipe as field delimiter
+        assert '& "|" &' not in script

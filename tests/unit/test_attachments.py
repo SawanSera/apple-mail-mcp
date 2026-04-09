@@ -117,7 +117,11 @@ class TestGetAttachments:
         self, mock_run: MagicMock, connector: AppleMailConnector
     ) -> None:
         """Test listing attachments from a message."""
-        mock_run.return_value = "document.pdf|application/pdf|524288|true\nimage.jpg|image/jpeg|102400|true"
+        sep = "\x1f"
+        mock_run.return_value = (
+            f"document.pdf{sep}application/pdf{sep}524288{sep}true\n"
+            f"image.jpg{sep}image/jpeg{sep}102400{sep}true"
+        )
 
         result = connector.get_attachments("12345")
 
@@ -196,18 +200,43 @@ class TestSaveAttachments:
                 save_directory=Path("/nonexistent/directory")
             )
 
-    @patch.object(AppleMailConnector, "_run_applescript")
-    def test_save_validates_path_traversal(
-        self, mock_run: MagicMock, connector: AppleMailConnector
+    def test_save_validates_path_traversal(self, connector: AppleMailConnector) -> None:
+        """Issue 8: path traversal check must fire BEFORE resolve() normalizes it."""
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            connector.save_attachments(
+                message_id="12345",
+                save_directory=Path("/tmp/../etc"),
+            )
+
+    def test_save_validates_path_traversal_relative(
+        self, connector: AppleMailConnector
     ) -> None:
-        """Test that path traversal is prevented."""
-        # Attempting path traversal should be blocked
-        # Will fail with FileNotFoundError or ValueError depending on path
+        """Issue 8: relative path with .. must not reach AppleScript.
+        Either ValueError (traversal detected) or FileNotFoundError (non-existent
+        path) is acceptable — both block the operation."""
         with pytest.raises((ValueError, FileNotFoundError)):
             connector.save_attachments(
                 message_id="12345",
-                save_directory=Path("../../etc")
+                save_directory=Path("../../etc"),
             )
+
+    @patch.object(AppleMailConnector, "_run_applescript")
+    def test_save_applescript_strips_filename_path_separators(
+        self, mock_run: MagicMock, connector: AppleMailConnector, tmp_path: Path
+    ) -> None:
+        """Issue 7: AppleScript must strip path separators from attachment filenames."""
+        mock_run.return_value = "1"
+
+        connector.save_attachments(
+            message_id="12345",
+            save_directory=tmp_path,
+        )
+
+        script = mock_run.call_args[0][0]
+        # The AppleScript must include filename sanitization
+        assert "text item delimiters" in script
+        assert "last text item" in script
+        assert "unnamed_attachment" in script  # fallback for ".." or empty names
 
 
 class TestAttachmentSecurity:

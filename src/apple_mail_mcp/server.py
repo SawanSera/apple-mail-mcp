@@ -16,6 +16,7 @@ from .exceptions import (
 from .mail_connector import AppleMailConnector
 from .security import (
     operation_logger,
+    rate_limit_check,
     require_confirmation,
     validate_bulk_operation,
     validate_send_operation,
@@ -244,6 +245,14 @@ def send_email(
         {"success": True, "message": "Email sent successfully"}
     """
     try:
+        # Rate limit — max 10 send operations per minute
+        if not rate_limit_check("send_email", window_seconds=60, max_operations=10):
+            return {
+                "success": False,
+                "error": "Rate limit exceeded: too many send operations. Please wait.",
+                "error_type": "rate_limited",
+            }
+
         # Validate operation
         is_valid, error_msg = validate_send_operation(to, cc, bcc)
         if not is_valid:
@@ -259,15 +268,12 @@ def send_email(
             "subject": subject,
             "to": to,
             "cc": cc or [],
-            "bcc": bcc or [],
             "body_preview": body[:100] + "..." if len(body) > 100 else body,
         }
 
         logger.info(f"Requesting confirmation to send email: {subject}")
-        logger.info(f"Recipients: {to}, CC: {cc}, BCC: {bcc}")
+        logger.info(f"Recipients: {to}, CC: {cc}")
 
-        # In production, this should actually block and wait for user confirmation
-        # For now, we'll proceed but log the confirmation requirement
         if not require_confirmation("send_email", confirmation_details):
             operation_logger.log_operation(
                 "send_email",
@@ -414,6 +420,14 @@ def send_email_with_attachments(
     from pathlib import Path
 
     try:
+        # Rate limit — max 10 send operations per minute
+        if not rate_limit_check("send_email_with_attachments", window_seconds=60, max_operations=10):
+            return {
+                "success": False,
+                "error": "Rate limit exceeded: too many send operations. Please wait.",
+                "error_type": "rate_limited",
+            }
+
         # Convert string paths to Path objects
         attachment_paths = [Path(p) for p in attachments]
 
@@ -933,6 +947,28 @@ def delete_messages(
                 "error_type": "validation_error",
             }
 
+        # Rate limit — max 5 delete operations per minute (conservative for destructive ops)
+        if not rate_limit_check("delete_messages", window_seconds=60, max_operations=5):
+            return {
+                "success": False,
+                "error": "Rate limit exceeded: too many delete operations. Please wait.",
+                "error_type": "rate_limited",
+            }
+
+        # Require confirmation — permanent delete is irreversible; trash delete is recoverable
+        confirmation_details = {
+            "count": len(message_ids),
+            "permanent": permanent,
+            "warning": "PERMANENT — cannot be undone" if permanent else "Messages moved to Trash",
+        }
+        if not require_confirmation("delete_messages", confirmation_details):
+            operation_logger.log_operation("delete_messages", confirmation_details, "cancelled")
+            return {
+                "success": False,
+                "error": "User cancelled operation",
+                "error_type": "cancelled",
+            }
+
         delete_type = "permanently" if permanent else "to trash"
         logger.info(f"Deleting {len(message_ids)} message(s) {delete_type}")
 
@@ -997,6 +1033,28 @@ def reply_to_message(
         )
     """
     try:
+        # Rate limit — max 10 reply operations per minute
+        if not rate_limit_check("reply_to_message", window_seconds=60, max_operations=10):
+            return {
+                "success": False,
+                "error": "Rate limit exceeded: too many reply operations. Please wait.",
+                "error_type": "rate_limited",
+            }
+
+        # Require confirmation — reply sends a real email
+        confirmation_details = {
+            "message_id": message_id,
+            "reply_all": reply_all,
+            "body_preview": body[:100] + "..." if len(body) > 100 else body,
+        }
+        if not require_confirmation("reply_to_message", confirmation_details):
+            operation_logger.log_operation("reply_to_message", confirmation_details, "cancelled")
+            return {
+                "success": False,
+                "error": "User cancelled operation",
+                "error_type": "cancelled",
+            }
+
         logger.info(f"Creating reply to message {message_id}")
 
         # Reply to the message
@@ -1066,6 +1124,29 @@ def forward_message(
                 "success": False,
                 "error": "At least one recipient required",
                 "error_type": "validation_error",
+            }
+
+        # Rate limit — max 10 forward operations per minute
+        if not rate_limit_check("forward_message", window_seconds=60, max_operations=10):
+            return {
+                "success": False,
+                "error": "Rate limit exceeded: too many forward operations. Please wait.",
+                "error_type": "rate_limited",
+            }
+
+        # Require confirmation — forward sends a real email
+        confirmation_details = {
+            "message_id": message_id,
+            "to": to,
+            "cc": cc or [],
+            "body_preview": body[:100] + "..." if len(body) > 100 else body,
+        }
+        if not require_confirmation("forward_message", confirmation_details):
+            operation_logger.log_operation("forward_message", confirmation_details, "cancelled")
+            return {
+                "success": False,
+                "error": "User cancelled operation",
+                "error_type": "cancelled",
             }
 
         logger.info(f"Forwarding message {message_id} to {len(to)} recipient(s)")
@@ -1143,6 +1224,15 @@ def save_draft(
         )
     """
     try:
+        is_valid, error_msg = validate_send_operation(to, cc, bcc)
+        if not is_valid:
+            logger.error(f"save_draft validation failed: {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg,
+                "error_type": "validation_error",
+            }
+
         logger.info(f"Saving draft to account '{account}'")
 
         draft_id = mail.save_draft(
