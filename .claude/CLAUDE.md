@@ -70,6 +70,10 @@ make coverage              # Coverage report
 
 **Hard rule:** If you wrote or modified AppleScript in the connector, integration tests must cover it before merge.
 
+## Session End Checklist
+
+Before closing or exiting a session, always ask the user to commit and push any uncommitted code changes to git. Run `git status` to check — if there are modified or untracked files, prompt the user before ending.
+
 ## Branch Convention
 
 `{type}/issue-{num}-{description}` — e.g., `feature/issue-42-thread-support`, `fix/issue-99-timeout`
