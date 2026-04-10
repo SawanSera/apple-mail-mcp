@@ -26,10 +26,11 @@ Every morning I check the inbox for new customer emails from the last 24 hours a
 ## Morning Run — Step by Step
 1. Scan inbox for all new emails from the last 24hrs
 2. Filter out automated/spam emails (see Auto-Skip Rules below) — tally them, do not process
-3. For each remaining email, scan the Sent folder for prior exchanges with that sender and similar enquiries
-4. Determine the email type based on existing flags and content
-5. Take the appropriate action (see below)
-6. Send summary email to admin@ruwiscakes.com.au
+3. Separately, identify and review all WooCommerce order emails (see WooCommerce Order Review below)
+4. For each remaining non-order email, scan the Sent folder for prior exchanges with that sender and similar enquiries
+5. Determine the email type based on existing flags and content
+6. Take the appropriate action (see below)
+7. Send summary email to admin@ruwiscakes.com.au
 
 ## Auto-Skip Rules
 
@@ -50,7 +51,59 @@ Skip an email silently (no flag, no draft) if it matches ANY of the following. T
 - Email is clearly an automated marketing sequence (abandoned cart, welcome series, re-engagement) where the sender is *not* a real customer replying — i.e. it originated from a bulk mail platform and no human wrote it
 - NOTE: If a real customer has replied to one of these automated emails (like today's Highton delivery enquiry), it is NOT auto-skipped — treat it as a normal customer email
 
+**Exception — WooCommerce order emails are NEVER auto-skipped:** Any email whose subject matches the pattern `[Ruwi's Cakes]: New order #` must always be processed as an order review, regardless of sender address. Do not tally these in the skip count.
+
 **When in doubt:** Do not auto-skip. Process the email normally.
+
+## WooCommerce Order Review
+
+**Identifying order emails:** Subject matches `[Ruwi's Cakes]: New order #` (e.g. `[Ruwi's Cakes]: New order #37236`).
+
+For each order email found in the last 24hrs, read the full email body and run all of the following checks. Include all findings in the **Order Review** section of the morning summary.
+
+**If the order email is part of an ongoing thread** (i.e. the customer or owner has replied to the original order confirmation), read all messages in the thread and treat it like any other customer email — determine whether a reply is needed and draft one if so, following the standard Drafting Rules. Set a green flag once a draft is saved. Run the order checks on the original order details regardless.
+
+**If the order email has no replies**, do not draft a reply or set any flag — it is informational only.
+
+### Checks to Run on Every Order
+
+**1. Past delivery date**
+Parse the delivery/dispatch date from the order. If it is earlier than today's date, flag as: *"Delivery date is in the past — possible website error."*
+
+**2. Unconfirmed delivery window request**
+Read the `Note:` / customer notes field. If the customer has requested a specific delivery time window (e.g. "between 2pm and 4pm", "morning delivery"), flag as: *"Customer has requested a delivery window — not yet confirmed."*
+
+**3. Missing required fields**
+Check whether the cake flavour field is present and non-empty. Flavour is the reliable indicator — if it is missing, other required fields (writing, recipient number, etc.) are typically missing too due to a website error. If flavour is present, treat all required fields as populated.
+
+Flag as: *"Required order fields appear to be missing (flavour not present) — possible website error."*
+
+**4. Custom topper message without custom topper selected**
+If the order contains a non-empty "Enter your custom topper message" field (or similarly named field), check the "Select your cake topper" field (or similarly named field). If the topper selection is anything other than "Custom topper" (e.g. "Happy Birthday", "18", blank, or a standard option), flag as: *"Customer entered a custom topper message but did not select the Custom Topper option — confirm whether they want to add the custom topper add-on."*
+
+**5. Incomplete shipping address**
+Check the shipping address. Flag as *"Shipping address appears incomplete"* if any of the following are missing or obviously absent:
+- Street number / building number
+- Street name
+- Suburb
+
+**6. Recipient phone number format**
+If a recipient phone number is present, check it is a valid Australian mobile number. Valid formats: starts with `04` (10 digits) or `+614` (12 digits with country code). Flag as: *"Recipient number does not appear to be a valid Australian mobile number."*
+
+**7. Design change entered in Notes instead of Design Change Requests field**
+Read the Notes / customer notes field. If it contains any language that sounds like a change or modification to the cake or cupcake design (e.g. references to colours, decorations, wording changes, "instead of", "can you change", "update the design", "swap", "replace"), and this content is in the Notes field rather than the dedicated Design Change Requests field, flag as: *"Possible design change entered in the Notes field — this is only checked by the delivery team and may be missed by the decorating team. Review and move to Design Change Requests if confirmed."*
+
+### Order Summary Format
+Present all orders as a table with columns: **Order**, **Customer**, **Delivery**, **Issues**. Keep issue descriptions as short as possible — one short phrase per issue, comma-separated if multiple. Use "✅ Clear" if no issues found.
+
+Short issue phrases to use:
+- "Delivery date in the past"
+- "Delivery window requested — unconfirmed"
+- "Required fields missing (no flavour)"
+- "Topper mismatch: [selected] selected, custom msg entered"
+- "Incomplete shipping address"
+- "Invalid recipient number"
+- "Design change in Notes field"
 
 ## How I Handle Each Email Type
 
@@ -109,6 +162,7 @@ These get purple flagged and included in the summary as needing attention.
 
 ## Morning Summary Email
 Sent to admin@ruwiscakes.com.au at the end of every morning run. Contains:
+- **Order Review** — one entry per WooCommerce order from the last 24hrs, with order number, customer name, delivery date, and any flags raised (or "No issues found")
 - List of drafts saved (green flagged) — sender and subject
 - List of emails needing attention (purple flagged) — sender, subject, and reason I couldn't handle
 - Active red/orange/blue threads that were drafted — noted separately as ongoing issues
