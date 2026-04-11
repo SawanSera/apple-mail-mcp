@@ -133,7 +133,7 @@ class TestAppleMailConnector:
     ) -> None:
         """Test getting a message."""
         sep = "\x1f"
-        mock_run.return_value = f"12345{sep}Subject{sep}sender@example.com{sep}Mon Jan 1 2024{sep}true{sep}false{sep}Message body"
+        mock_run.return_value = f"12345{sep}Subject{sep}sender@example.com{sep}Mon Jan 1 2024{sep}true{sep}false{sep}false{sep}Message body"
 
         result = connector.get_message("12345", include_content=True)
 
@@ -142,6 +142,7 @@ class TestAppleMailConnector:
         assert result["content"] == "Message body"
         assert result["read_status"] is True
         assert result["flagged"] is False
+        assert result["replied_to"] is False
 
     @patch.object(AppleMailConnector, "_run_applescript")
     def test_send_email_basic(
@@ -236,7 +237,7 @@ class TestAppleMailConnector:
         """Issue 11: message body containing '|' must not corrupt field parsing."""
         sep = "\x1f"
         mock_run.return_value = (
-            f"12345{sep}Subject{sep}sender@example.com{sep}Mon Jan 1 2024{sep}true{sep}false{sep}Body with | pipes | here"
+            f"12345{sep}Subject{sep}sender@example.com{sep}Mon Jan 1 2024{sep}true{sep}false{sep}true{sep}Body with | pipes | here"
         )
 
         result = connector.get_message("12345")

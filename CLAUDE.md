@@ -160,11 +160,14 @@ The `get_message` tool will include a `prompt_injection_warning` field in its re
 
 These get purple flagged and included in the summary as needing attention.
 
-## Morning Summary Email
-Sent to admin@ruwiscakes.com.au at the end of every morning run. Contains:
-- **Order Review** — one entry per WooCommerce order from the last 24hrs, with order number, customer name, delivery date, and any flags raised (or "No issues found")
-- List of drafts saved (green flagged) — sender and subject
-- List of emails needing attention (purple flagged) — sender, subject, and reason I couldn't handle
-- Active red/orange/blue threads that were drafted — noted separately as ongoing issues
-- Any emails already green or purple from previous runs that haven't been actioned yet
-- Single line: *"Skipped X automated/spam emails."* (or omit if zero)
+## Morning Run Output
+At the end of every morning run, push all results to ClickUp via `scripts/clickup_push.py`. No summary email is sent. ClickUp is the single source of truth.
+
+Each email processed becomes a task in the **Morning Email Log > Email Inbox** list in the Ruwi's Cakes Orders space, grouped by Category:
+- **Order Review** — one task per WooCommerce order, with issues or ✅ Resolved
+- **Draft Saved** — one task per drafted reply, with a one-line draft summary
+- **Needs Attention** — purple-flagged emails with reason
+- **Ongoing Thread** — red/orange/blue flagged threads that were drafted
+- **Already Flagged** — pre-existing green/purple emails not yet actioned
+
+Tasks are updated in place on subsequent runs (matched by Thread ID) so statuses evolve as threads progress.

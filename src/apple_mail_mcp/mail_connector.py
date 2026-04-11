@@ -300,9 +300,10 @@ class AppleMailConnector:
                         set msgDate to date received of msg as text
                         set msgRead to read status of msg
                         set msgFlagged to flagged status of msg
+                        set msgReplied to replied to of msg
                         {content_clause}
 
-                        return msgId & (ASCII character 31) & msgSubject & (ASCII character 31) & msgSender & (ASCII character 31) & msgDate & (ASCII character 31) & msgRead & (ASCII character 31) & msgFlagged & (ASCII character 31) & msgContent
+                        return msgId & (ASCII character 31) & msgSubject & (ASCII character 31) & msgSender & (ASCII character 31) & msgDate & (ASCII character 31) & msgRead & (ASCII character 31) & msgFlagged & (ASCII character 31) & msgReplied & (ASCII character 31) & msgContent
                     end try
                 end repeat
             end repeat
@@ -314,7 +315,7 @@ class AppleMailConnector:
         result = self._run_applescript(script)
 
         # Parse result
-        parts = result.split("\x1f", 6)  # Max 7 parts
+        parts = result.split("\x1f", 7)  # Max 8 parts
         if len(parts) >= 6:
             return {
                 "id": parts[0],
@@ -323,7 +324,8 @@ class AppleMailConnector:
                 "date_received": parts[3],
                 "read_status": parts[4].lower() == "true",
                 "flagged": parts[5].lower() == "true",
-                "content": parts[6] if len(parts) > 6 else "",
+                "replied_to": parts[6].lower() == "true" if len(parts) > 6 else False,
+                "content": parts[7] if len(parts) > 7 else "",
             }
 
         raise MailMessageNotFoundError(f"Could not parse message: {message_id}")
