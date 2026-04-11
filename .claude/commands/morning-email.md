@@ -18,7 +18,7 @@ Run the Ruwi's Cakes morning email workflow.
    d. **If no replies** — record findings for the summary only, do NOT draft a reply or set any flag
 4. **For each remaining non-order email:**
    a. Check the existing flag colour to determine email type
-   b. Check if `get_message` returns `replied_to: true` — if so, the owner has already replied manually. Skip drafting, do not flag, push to ClickUp as **Owner Replied** category with status Resolved.
+   b. Check if `get_message` returns `replied_to: true` — if so, the owner has already replied manually. Skip drafting, do not flag, and do not push to ClickUp.
    c. Scan the Sent folder for prior exchanges with that sender (and similar enquiries) to learn how the owner typically replies
    d. Take the appropriate action based on flag state:
       - **Unflagged** → draft reply → set green flag
@@ -54,7 +54,6 @@ Run the Ruwi's Cakes morning email workflow.
    - Purple flagged → category: `Needs Attention`, status: `Active`
    - Red/orange/blue thread drafted → category: `Ongoing Thread`, status: `Drafted`
    - Pre-existing green/purple not actioned → category: `Already Flagged`, status: `Active`
-   - Owner already replied (`replied_to: true`) → category: `Owner Replied`, status: `Resolved` *(auto-resolved)*
 
    **Do NOT push to ClickUp:** Emails where a draft was saved (green flagged, unflagged emails). These are tracked in Apple Mail via the green flag — no need to duplicate in ClickUp. Also do NOT push order emails where all checks pass (no issues found) — these require no action and do not need to be tracked.
 
