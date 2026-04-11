@@ -300,7 +300,7 @@ class AppleMailConnector:
                         set msgDate to date received of msg as text
                         set msgRead to read status of msg
                         set msgFlagged to flagged status of msg
-                        set msgReplied to replied to of msg
+                        set msgReplied to (was replied to of msg)
                         {content_clause}
 
                         return msgId & (ASCII character 31) & msgSubject & (ASCII character 31) & msgSender & (ASCII character 31) & msgDate & (ASCII character 31) & msgRead & (ASCII character 31) & msgFlagged & (ASCII character 31) & msgReplied & (ASCII character 31) & msgContent

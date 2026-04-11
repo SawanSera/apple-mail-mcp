@@ -85,7 +85,7 @@ If a recipient phone number is present, check it is a valid Australian mobile nu
 Read the Notes / customer notes field. If it contains any language that sounds like a change or modification to the cake or cupcake design (e.g. references to colours, decorations, wording changes, "instead of", "can you change", "update the design", "swap", "replace"), and this content is in the Notes field rather than the dedicated Design Change Requests field, flag as: *"Possible design change entered in the Notes field — this is only checked by the delivery team and may be missed by the decorating team. Review and move to Design Change Requests if confirmed."*
 
 ### Order ClickUp Task Format
-One task per order. Keep the description concise — one short phrase per issue, comma-separated if multiple. Use "✅ Clear" if no issues found. Status: `Active` if issues, `Resolved` if clear.
+One task per order, **only if issues are found**. If all checks pass, do not push to ClickUp. Keep the description concise — one short phrase per issue, comma-separated if multiple. Status: `Active`.
 
 Short issue phrases to use:
 - "Delivery date in the past"

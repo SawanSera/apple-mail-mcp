@@ -51,13 +51,12 @@ Run the Ruwi's Cakes morning email workflow.
 
    **Category and status mapping:**
    - Order with issues → category: `Order Review`, status: `Active`
-   - Order with no issues (all checks pass) → category: `Order Review`, status: `Resolved` *(auto-resolved)*
    - Purple flagged → category: `Needs Attention`, status: `Active`
    - Red/orange/blue thread drafted → category: `Ongoing Thread`, status: `Drafted`
    - Pre-existing green/purple not actioned → category: `Already Flagged`, status: `Active`
    - Owner already replied (`replied_to: true`) → category: `Owner Replied`, status: `Resolved` *(auto-resolved)*
 
-   **Do NOT push to ClickUp:** Emails where a draft was saved (green flagged, unflagged emails). These are tracked in Apple Mail via the green flag — no need to duplicate in ClickUp.
+   **Do NOT push to ClickUp:** Emails where a draft was saved (green flagged, unflagged emails). These are tracked in Apple Mail via the green flag — no need to duplicate in ClickUp. Also do NOT push order emails where all checks pass (no issues found) — these require no action and do not need to be tracked.
 
    **Important:** The script will never reopen a task the owner has manually marked complete in ClickUp. If a task is already closed, it stays closed regardless of what the workflow finds.
 
