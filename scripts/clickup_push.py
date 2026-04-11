@@ -75,10 +75,11 @@ def _assert_not_protected(list_id: str) -> None:
 
 CATEGORY_OPTIONS = [
     {"name": "Order Review",    "color": "#BF4ACC", "orderindex": 0},
-    {"name": "Needs Attention", "color": "#f50000", "orderindex": 1},
-    {"name": "Ongoing Thread",  "color": "#f8ae00", "orderindex": 2},
-    {"name": "Already Flagged", "color": "#87909e", "orderindex": 3},
-    {"name": "Owner Replied",   "color": "#0075ff", "orderindex": 4},
+    {"name": "Draft Saved",     "color": "#6bc950", "orderindex": 1},
+    {"name": "Needs Attention", "color": "#f50000", "orderindex": 2},
+    {"name": "Ongoing Thread",  "color": "#f8ae00", "orderindex": 3},
+    {"name": "Already Flagged", "color": "#87909e", "orderindex": 4},
+    {"name": "Owner Replied",   "color": "#0075ff", "orderindex": 5},
 ]
 
 CATEGORY_INDEX = {opt["name"]: opt["orderindex"] for opt in CATEGORY_OPTIONS}
