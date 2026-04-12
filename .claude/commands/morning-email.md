@@ -2,7 +2,9 @@ Run the Ruwi's Cakes morning email workflow.
 
 ## Steps
 
-1. **Scan inbox** — search for all emails received in the last 24 hours
+1. **Scan inbox** — check today's date (available in system context as `currentDate`):
+   - If today is **Monday**: search for all emails received in the **last 3 days** (covers Friday afternoon + Saturday + Sunday, since emails are not monitored after 12pm Friday through the weekend)
+   - Any other day: search for all emails received in the **last 24 hours**
 2. **Filter auto-skip emails** — silently skip any that match the Auto-Skip Rules (noreply senders, automated subjects, marketing blasts, etc.). Tally the count. **Exception:** emails with subject matching `[Ruwi's Cakes]: New order #` are NEVER auto-skipped.
 3. **Review WooCommerce orders** — from the full inbox results, identify all emails whose subject matches `[Ruwi's Cakes]: New order #`. For each:
    a. Read the full email body (and full thread if replies exist)
