@@ -195,10 +195,13 @@ def setup() -> tuple[str, dict[str, str]]:
 # Task upsert
 # ---------------------------------------------------------------------------
 
+_FIND_TASK_MAX_PAGES = 20  # 2 000 tasks max — prevents rate-limit exhaustion on large lists
+
+
 def _find_task(list_id: str, thread_id: str, thread_field_id: str) -> Optional[tuple[str, bool]]:
     """Return (task_id, is_manually_closed) for a matching task, or None."""
     page = 0
-    while True:
+    while page < _FIND_TASK_MAX_PAGES:
         resp = _request("GET", f"/list/{list_id}/task?page={page}&include_closed=true")
         tasks = resp.get("tasks", [])
         if not tasks:
@@ -246,9 +249,15 @@ def upsert_task(list_id: str, field_ids: dict, task: dict) -> None:
     open_status, closed_status = _get_status_names(list_id)
     resolved = task.get("status") == "Resolved"
 
+    raw_description = task.get("description", "")
+    description = (
+        f"[Morning Email Run — {datetime.now().date()}]\n"
+        f"---\n"
+        f"{raw_description}"
+    )
     payload = {
         "name":          task["name"],
-        "description":   task.get("description", ""),
+        "description":   description,
         "custom_fields": _build_custom_fields(field_ids, task),
     }
 
@@ -272,8 +281,20 @@ def upsert_task(list_id: str, field_ids: dict, task: dict) -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 
+_STDIN_MAX_BYTES = 1 * 1024 * 1024  # 1 MB — prevents unbounded memory consumption
+_REQUIRED_TASK_FIELDS = ("thread_id", "name", "category")
+
+
+def _validate_task(task: dict, index: int) -> Optional[str]:
+    """Return an error string if required fields are missing, else None."""
+    for field in _REQUIRED_TASK_FIELDS:
+        if not task.get(field):
+            return f"task[{index}] missing required field '{field}'"
+    return None
+
+
 def main() -> None:
-    raw = sys.stdin.read().strip()
+    raw = sys.stdin.read(_STDIN_MAX_BYTES).strip()
     if not raw:
         print("Error: no input provided via stdin", file=sys.stderr)
         sys.exit(1)
@@ -288,6 +309,17 @@ def main() -> None:
     if not tasks:
         print("No tasks to push.", file=sys.stderr)
         return
+
+    # Validate all tasks up-front so we fail fast before any API calls
+    validation_errors = []
+    for i, task in enumerate(tasks):
+        err = _validate_task(task, i)
+        if err:
+            validation_errors.append(err)
+    if validation_errors:
+        for err in validation_errors:
+            print(f"Error: {err}", file=sys.stderr)
+        sys.exit(1)
 
     print(f"Setting up ClickUp list...", file=sys.stderr)
     list_id, field_ids = setup()
