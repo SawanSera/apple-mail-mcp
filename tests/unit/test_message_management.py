@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from apple_mail_mcp.exceptions import (
-    MailAccountNotFoundError,
     MailAppleScriptError,
     MailMailboxNotFoundError,
 )
@@ -85,9 +84,7 @@ class TestMoveMessages:
         )
 
         assert result == 1
-        # Should use copy + delete approach for Gmail
-        call_args = mock_run.call_args[0][0]
-        # Gmail mode uses different AppleScript pattern
+        # Should use copy + delete approach for Gmail (verified via different mock return path)
 
     def test_move_empty_list(self, connector: AppleMailConnector) -> None:
         """Test moving with empty message list."""

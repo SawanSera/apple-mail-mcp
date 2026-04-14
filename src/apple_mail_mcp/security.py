@@ -3,14 +3,15 @@ Security utilities for Apple Mail MCP.
 """
 
 import logging
+import re
 import subprocess
 import threading
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
-from .exceptions import MailOperationCancelledError
 from .utils import validate_email
 
 logger = logging.getLogger(__name__)
@@ -290,8 +291,6 @@ def detect_prompt_injection(content: str) -> tuple[bool, list[str]]:
         >>> detect_prompt_injection("Hi, I'd like to order a cake please")
         (False, [])
     """
-    import re
-
     patterns = [
         r"ignore\s+(all\s+)?(previous|prior|above|earlier)\s+instructions?",
         r"disregard\s+(all\s+)?(previous|prior|above|earlier)\s+instructions?",

@@ -10,17 +10,20 @@ if ! command -v radon &> /dev/null; then
     if command -v uv &> /dev/null; then
         echo "Installing radon..."
         uv pip install radon -q
+        RADON="uv run radon"
     else
         echo "Error: radon not found. Install with: pip install radon"
         exit 1
     fi
+else
+    RADON="radon"
 fi
 
 echo "Checking cyclomatic complexity (threshold: CC <= $THRESHOLD)..."
 echo ""
 
 # Get complexity report
-REPORT=$(radon cc "$SRC_DIR" -n C -s 2>&1) || true
+REPORT=$($RADON cc "$SRC_DIR" -n C -s 2>&1) || true
 
 if [ -z "$REPORT" ]; then
     echo "All functions have complexity <= B (acceptable)."
@@ -31,7 +34,7 @@ echo "$REPORT"
 echo ""
 
 # Check for functions exceeding threshold
-FAILURES=$(radon cc "$SRC_DIR" -n F -j 2>&1 | python3 -c "
+FAILURES=$($RADON cc "$SRC_DIR" -n F -j 2>&1 | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 failures = []

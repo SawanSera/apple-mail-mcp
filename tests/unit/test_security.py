@@ -1,10 +1,7 @@
 """Unit tests for security module."""
 
-import logging
 import time
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from apple_mail_mcp.security import (
     OperationLogger,
@@ -201,8 +198,8 @@ class TestBccPrivacy:
     """Issue 9: BCC recipients must not appear in log output."""
 
     def test_send_email_does_not_log_bcc(self) -> None:
-        from apple_mail_mcp.mail_connector import AppleMailConnector
         from apple_mail_mcp import server
+        from apple_mail_mcp.mail_connector import AppleMailConnector
 
         with patch.object(AppleMailConnector, "_run_applescript", return_value="sent"):
             with patch.object(server.logger, "info") as mock_log:
@@ -248,8 +245,9 @@ class TestSaveDraftValidation:
 
     def test_save_draft_accepts_valid_email(self) -> None:
         from unittest.mock import patch
-        from apple_mail_mcp.mail_connector import AppleMailConnector
+
         from apple_mail_mcp import server
+        from apple_mail_mcp.mail_connector import AppleMailConnector
 
         with patch.object(AppleMailConnector, "_run_applescript", return_value="draft-id-123"):
             result = server.save_draft(
@@ -364,8 +362,8 @@ class TestServerRateLimiting:
         reset_confirmation_handler()
 
     def test_send_email_rate_limited_after_10_calls(self) -> None:
-        from apple_mail_mcp.mail_connector import AppleMailConnector
         from apple_mail_mcp import server
+        from apple_mail_mcp.mail_connector import AppleMailConnector
 
         with patch.object(AppleMailConnector, "_run_applescript", return_value="sent"):
             for _ in range(10):
@@ -377,8 +375,8 @@ class TestServerRateLimiting:
         assert result["error_type"] == "rate_limited"
 
     def test_delete_messages_rate_limited_after_5_calls(self) -> None:
-        from apple_mail_mcp.mail_connector import AppleMailConnector
         from apple_mail_mcp import server
+        from apple_mail_mcp.mail_connector import AppleMailConnector
 
         with patch.object(AppleMailConnector, "_run_applescript", return_value="1"):
             for _ in range(5):
@@ -432,8 +430,8 @@ class TestServerConfirmation:
         assert result["error_type"] == "cancelled"
 
     def test_reply_proceeds_when_user_confirms(self) -> None:
-        from apple_mail_mcp.mail_connector import AppleMailConnector
         from apple_mail_mcp import server
+        from apple_mail_mcp.mail_connector import AppleMailConnector
         set_confirmation_handler(lambda op, details: True)
 
         with patch.object(AppleMailConnector, "_run_applescript", return_value="67890"):
@@ -442,8 +440,8 @@ class TestServerConfirmation:
         assert result["success"] is True
 
     def test_forward_proceeds_when_user_confirms(self) -> None:
-        from apple_mail_mcp.mail_connector import AppleMailConnector
         from apple_mail_mcp import server
+        from apple_mail_mcp.mail_connector import AppleMailConnector
         set_confirmation_handler(lambda op, details: True)
 
         with patch.object(AppleMailConnector, "_run_applescript", return_value="67890"):
@@ -454,8 +452,8 @@ class TestServerConfirmation:
         assert result["success"] is True
 
     def test_delete_proceeds_when_user_confirms(self) -> None:
-        from apple_mail_mcp.mail_connector import AppleMailConnector
         from apple_mail_mcp import server
+        from apple_mail_mcp.mail_connector import AppleMailConnector
         set_confirmation_handler(lambda op, details: True)
 
         with patch.object(AppleMailConnector, "_run_applescript", return_value="1"):

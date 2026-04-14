@@ -2,7 +2,6 @@
 AppleScript-based connector for Apple Mail.
 """
 
-import json
 import logging
 import subprocess
 from pathlib import Path
@@ -14,7 +13,18 @@ from .exceptions import (
     MailMailboxNotFoundError,
     MailMessageNotFoundError,
 )
-from .utils import escape_applescript_string, sanitize_input, sanitize_message_id
+from .security import validate_attachment_size, validate_attachment_type
+from .utils import (
+    escape_applescript_string,
+    format_applescript_list,
+    format_recipient_list,
+    get_flag_index,
+    sanitize_input,
+    sanitize_mailbox_name,
+    sanitize_message_id,
+    validate_email,
+    validate_flag_color,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,13 +86,8 @@ class AppleMailConnector:
             logger.debug(f"AppleScript output: {output[:200]}...")
             return output
 
-        except subprocess.TimeoutExpired:
-            raise MailAppleScriptError(f"Script execution timeout after {self.timeout}s")
-        except Exception as e:
-            if isinstance(e, (MailAccountNotFoundError, MailMailboxNotFoundError,
-                            MailMessageNotFoundError, MailAppleScriptError)):
-                raise
-            raise MailAppleScriptError(f"Unexpected error: {str(e)}")
+        except subprocess.TimeoutExpired as e:
+            raise MailAppleScriptError(f"Script execution timeout after {self.timeout}s") from e
 
     def list_accounts(self) -> list[dict[str, Any]]:
         """
@@ -278,11 +283,7 @@ class AppleMailConnector:
         Raises:
             MailMessageNotFoundError: If message doesn't exist
         """
-        message_id_safe = escape_applescript_string(sanitize_input(message_id))
-
-        # Note: Direct message ID lookup is tricky in AppleScript
-        # We need to search through mailboxes
-        # For now, we'll use a simplified approach
+        message_id_safe = sanitize_message_id(message_id)
 
         content_clause = 'set msgContent to content of msg' if include_content else 'set msgContent to ""'
 
@@ -357,10 +358,9 @@ class AppleMailConnector:
         subject_safe = escape_applescript_string(sanitize_input(subject))
         body_safe = escape_applescript_string(sanitize_input(body))
 
-        # Build recipient lists
-        to_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in to)
-        cc_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in (cc or []))
-        bcc_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in (bcc or []))
+        to_list = format_recipient_list(to)
+        cc_list = format_recipient_list(cc or [])
+        bcc_list = format_recipient_list(bcc or [])
 
         script = f"""
         tell application "Mail"
@@ -469,8 +469,6 @@ class AppleMailConnector:
             ValueError: If attachment exceeds size limit
             MailAppleScriptError: If send fails
         """
-        from .security import validate_attachment_size, validate_attachment_type
-
         # Validate all attachments exist and are within size limit
         for attachment_path in attachments:
             if not attachment_path.exists():
@@ -494,10 +492,9 @@ class AppleMailConnector:
         subject_safe = escape_applescript_string(sanitize_input(subject))
         body_safe = escape_applescript_string(sanitize_input(body))
 
-        # Build recipient lists
-        to_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in to)
-        cc_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in (cc or []))
-        bcc_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in (bcc or []))
+        to_list = format_recipient_list(to)
+        cc_list = format_recipient_list(cc or [])
+        bcc_list = format_recipient_list(bcc or [])
 
         # Build attachment list (convert to POSIX file references)
         attachment_list = ", ".join(
@@ -553,7 +550,7 @@ class AppleMailConnector:
         Raises:
             MailMessageNotFoundError: If message doesn't exist
         """
-        message_id_safe = escape_applescript_string(sanitize_input(message_id))
+        message_id_safe = sanitize_message_id(message_id)
 
         script = f"""
         tell application "Mail"
@@ -643,9 +640,9 @@ class AppleMailConnector:
         try:
             save_directory = save_directory.resolve()
         except (RuntimeError, OSError) as e:
-            raise ValueError(f"Invalid save directory: {e}")
+            raise ValueError(f"Invalid save directory: {e}") from e
 
-        message_id_safe = escape_applescript_string(sanitize_input(message_id))
+        message_id_safe = sanitize_message_id(message_id)
         dir_safe = escape_applescript_string(str(save_directory))
 
         # Build index filter if specified
@@ -718,8 +715,6 @@ class AppleMailConnector:
         """
         if not message_ids:
             return 0
-
-        from .utils import sanitize_input
 
         account_safe = escape_applescript_string(sanitize_input(account))
         mailbox_safe = escape_applescript_string(sanitize_input(destination_mailbox))
@@ -800,8 +795,6 @@ class AppleMailConnector:
         if not message_ids:
             return 0
 
-        from .utils import get_flag_index, validate_flag_color
-
         if not validate_flag_color(flag_color):
             raise ValueError(f"Invalid flag color: {flag_color}")
 
@@ -857,8 +850,6 @@ class AppleMailConnector:
             MailAccountNotFoundError: If account doesn't exist
             MailAppleScriptError: If mailbox already exists
         """
-        from .utils import sanitize_mailbox_name
-
         # Validate and sanitize name
         sanitized_name = sanitize_mailbox_name(name)
         if not sanitized_name:
@@ -992,8 +983,6 @@ class AppleMailConnector:
         Raises:
             MailMessageNotFoundError: If message doesn't exist
         """
-        from .utils import sanitize_input
-
         message_id_safe = sanitize_message_id(message_id)
         body_safe = escape_applescript_string(sanitize_input(body))
         reply_type = "reply to all" if reply_all else "reply"
@@ -1063,9 +1052,9 @@ class AppleMailConnector:
         body_safe = escape_applescript_string(sanitize_input(body))
         account_safe = escape_applescript_string(sanitize_input(account))
 
-        to_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in to)
-        cc_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in (cc or []))
-        bcc_list = ", ".join(f'"{escape_applescript_string(addr)}"' for addr in (bcc or []))
+        to_list = format_recipient_list(to)
+        cc_list = format_recipient_list(cc or [])
+        bcc_list = format_recipient_list(bcc or [])
 
         # Resolve the account's email address first so we can set it as sender.
         # Setting sender routes the draft to the correct account's Drafts folder.
@@ -1141,8 +1130,6 @@ class AppleMailConnector:
             ValueError: If no recipients or invalid emails
             MailMessageNotFoundError: If message doesn't exist
         """
-        from .utils import format_applescript_list, sanitize_input, validate_email
-
         if not to:
             raise ValueError("At least one recipient required")
 

@@ -3,6 +3,7 @@ Utility functions for Apple Mail MCP.
 """
 
 import re
+from pathlib import Path
 from typing import Any
 
 
@@ -163,9 +164,6 @@ def sanitize_filename(filename: str) -> str:
         >>> sanitize_filename("my-file_v2.txt")
         'my-file_v2.txt'
     """
-    import re
-    from pathlib import Path
-
     # Remove null bytes
     filename = filename.replace("\x00", "")
 
@@ -213,8 +211,6 @@ def sanitize_mailbox_name(name: str) -> str:
         >>> sanitize_mailbox_name("../../../etc")
         ''
     """
-    import re
-
     # Remove null bytes
     name = name.replace("\x00", "")
 
@@ -230,6 +226,26 @@ def sanitize_mailbox_name(name: str) -> str:
     name = name.strip()
 
     return name
+
+
+def format_recipient_list(addresses: list[str]) -> str:
+    """
+    Format a list of email addresses as a comma-separated AppleScript string literal sequence.
+
+    Returns the inner content suitable for embedding inside AppleScript braces,
+    e.g. used as: {{{format_recipient_list(to)}}}
+
+    Args:
+        addresses: List of email address strings
+
+    Returns:
+        Comma-separated AppleScript string literals, e.g. '"a@b.com", "c@d.com"'
+
+    Example:
+        >>> format_recipient_list(["a@b.com", "c@d.com"])
+        '"a@b.com", "c@d.com"'
+    """
+    return ", ".join(f'"{escape_applescript_string(addr)}"' for addr in addresses)
 
 
 def sanitize_message_id(message_id: str) -> str:
@@ -301,10 +317,12 @@ def get_flag_index(color: str) -> int:
         >>> get_flag_index("none")
         -1
     """
+    # Apple Mail flag index values (AppleScript flag index property).
+    # "none" value is irrelevant — flag_message sets flagged status=false to clear.
     color_map = {
         "none": 0,
-        "red": 0,
-        "orange": 1,
+        "orange": 0,
+        "red": 1,
         "yellow": 2,
         "green": 3,
         "blue": 4,

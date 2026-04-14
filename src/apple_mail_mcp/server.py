@@ -3,6 +3,7 @@ FastMCP server for Apple Mail integration.
 """
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
@@ -304,7 +305,7 @@ def send_email(
             }
 
         # Send the email
-        result = mail.send_email(
+        mail.send_email(
             subject=subject,
             body=body,
             to=to,
@@ -434,8 +435,6 @@ def send_email_with_attachments(
         ... )
         {"success": True, "message": "Email sent with 1 attachment(s)"}
     """
-    from pathlib import Path
-
     try:
         # Rate limit — max 10 send operations per minute
         if not rate_limit_check("send_email_with_attachments", window_seconds=60, max_operations=10):
@@ -493,7 +492,7 @@ def send_email_with_attachments(
             }
 
         # Send the email
-        result = mail.send_email_with_attachments(
+        mail.send_email_with_attachments(
             subject=subject,
             body=body,
             to=to,
@@ -634,8 +633,6 @@ def save_attachments(
         >>> save_attachments("12345", "/Users/me/Downloads", [0, 2])
         {"success": True, "saved": 2, "directory": "/Users/me/Downloads"}
     """
-    from pathlib import Path
-
     try:
         save_path = Path(save_directory)
 
