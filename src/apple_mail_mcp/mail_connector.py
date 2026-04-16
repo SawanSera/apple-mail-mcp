@@ -173,6 +173,7 @@ class AppleMailConnector:
         sender_contains: str | None = None,
         subject_contains: str | None = None,
         read_status: bool | None = None,
+        received_within_hours: int | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
         """
@@ -184,6 +185,7 @@ class AppleMailConnector:
             sender_contains: Filter by sender
             subject_contains: Filter by subject
             read_status: Filter by read status (True=read, False=unread)
+            received_within_hours: Only return messages received within the last N hours
             limit: Maximum results
 
         Returns:
@@ -198,6 +200,12 @@ class AppleMailConnector:
 
         # Build whose clause
         conditions = []
+        cutoff_setup = ""
+        if received_within_hours is not None:
+            hours = int(received_within_hours)
+            cutoff_setup = f"set cutoffDate to (current date) - ({hours} * 60 * 60)"
+            conditions.append("date received >= cutoffDate")
+
         if sender_contains:
             sender_safe = escape_applescript_string(sanitize_input(sender_contains))
             conditions.append(f'sender contains "{sender_safe}"')
@@ -221,7 +229,9 @@ class AppleMailConnector:
         limit_check = f"if msgCount >= {limit} then exit repeat\n                " if limit else ""
 
         script = f"""
+        with timeout of 300 seconds
         tell application "Mail"
+            {cutoff_setup}
             set accountRef to account "{account_safe}"
             set mailboxRef to mailbox "{mailbox_safe}" of accountRef
             {fetch_expr}
@@ -247,6 +257,7 @@ class AppleMailConnector:
 
             return output
         end tell
+        end timeout
         """
 
         result = self._run_applescript(script)

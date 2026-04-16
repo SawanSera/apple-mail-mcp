@@ -2,10 +2,12 @@ Run the Ruwi's Cakes morning email workflow.
 
 ## Steps
 
-1. **Scan inbox** — check today's date (available in system context as `currentDate`):
-   - If today is **Monday**: search for all emails received in the **last 3 days** (covers Friday afternoon + Saturday + Sunday, since emails are not monitored after 12pm Friday through the weekend)
-   - Any other day: search for all emails received in the **last 24 hours**
-2. **Filter auto-skip emails** — silently skip any that match the Auto-Skip Rules (noreply senders, automated subjects, marketing blasts, etc.). Tally the count. **Exception:** emails with subject matching `[Ruwi's Cakes]: New order #` are NEVER auto-skipped.
+1. **Scan inbox** — use account: **"Order - Ruwi's Cakes"**, mailbox: **"INBOX"**, with the `received_within_hours` parameter (do NOT use `read_status` — this ensures read and unread emails are both included):
+   - If today is **Monday**: `received_within_hours=72` (covers Friday afternoon + Saturday + Sunday)
+   - Any other day: `received_within_hours=24`
+2. **Filter auto-skip emails** — silently skip any that match the Auto-Skip Rules (noreply senders, automated subjects, marketing blasts, etc.). Tally the count. **Exceptions — never auto-skip:**
+   - Subject matches `[Ruwi's Cakes]: New order #` → WooCommerce order review (step 3)
+   - Subject is `New Entry: FAQ page` or `New Custom Order` from `order@ruwiscakes.com.au` → website form enquiries, always need a reply (step 4)
 3. **Review WooCommerce orders** — from the full inbox results, identify all emails whose subject matches `[Ruwi's Cakes]: New order #`. For each:
    a. Read the full email body (and full thread if replies exist)
    b. Run all seven order checks:
@@ -21,7 +23,7 @@ Run the Ruwi's Cakes morning email workflow.
 4. **For each remaining non-order email:**
    a. Check the existing flag colour to determine email type
    b. Check if `get_message` returns `replied_to: true` — if so, the owner has already replied manually. Skip drafting, do not flag, and do not push to ClickUp.
-   c. Scan the Sent folder for prior exchanges with that sender (and similar enquiries) to learn how the owner typically replies
+   c. Scan the Sent folder for prior exchanges with that sender (and similar enquiries) to learn how the owner typically replies — use account: **"Order - Ruwi's Cakes"**, mailbox: **"Sent"**
    d. Take the appropriate action based on flag state:
       - **Unflagged** → draft reply → set green flag
       - **Red flagged** → read full thread → draft carefully → keep red + add green

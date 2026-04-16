@@ -44,6 +44,8 @@ Skip an email silently (no flag, no draft) if it matches ANY of the following. T
 
 **Exception — WooCommerce order emails are NEVER auto-skipped:** Any email whose subject matches the pattern `[Ruwi's Cakes]: New order #` must always be processed as an order review, regardless of sender address. Do not tally these in the skip count.
 
+**Exception — Website form enquiries are NEVER auto-skipped:** Emails with subject `New Entry: FAQ page` or `New Custom Order` from `order@ruwiscakes.com.au` are customer enquiries submitted via the website contact form — not automated notifications. They always need a reply. Do not tally these in the skip count. See **Website Form Enquiries** below.
+
 **When in doubt:** Do not auto-skip. Process the email normally.
 
 ## WooCommerce Order Review
@@ -95,6 +97,33 @@ Short issue phrases to use:
 - "Incomplete shipping address"
 - "Invalid recipient number"
 - "Design change in Notes field"
+
+## Website Form Enquiries
+
+Two email types arrive from `order@ruwiscakes.com.au` that are customer enquiries forwarded through the website — never automated notifications.
+
+### New Entry: FAQ page
+Customer submitted a question via the website contact form. The email body contains:
+- `Name` — use this to greet the customer
+- `Email` — **send the draft to this address**, not to `order@ruwiscakes.com.au`
+- `Subject` — their topic
+- `Comment or Message` — their question
+
+Reply directly to the customer's question based on Sent history patterns. Common replies:
+- Custom/non-website designs → "Unfortunately at the moment we are only taking orders for the designs listed on the website. Please click here to view available designs: https://ruwiscakes.com.au/"
+- Delivery area out of range → provide nearest handover location (scan Sent for the standard handover blurb)
+- Dietary questions (GF, vegan, etc.) → answer and link to relevant collection
+- If the question requires photos, specific pricing the owner must confirm, or knowledge not in Sent → flag purple
+
+### New Custom Order
+Customer submitted a custom order request via the website form. The email body contains:
+- `Name`, `Email`, `Number of guests`, `When do you expect to have the cake?`, `Select your flavours`, `Select your toppings`, `Special requirements or Dietary needs`, `Delivery or Pick-up?`, delivery address, and `How did you hear about us?`
+
+**Send the draft to the `Email` field value**, not to `order@ruwiscakes.com.au`. Greet by `Name`.
+
+Reply by recommending the appropriate collection based on guest count — scan Sent for similar guest counts to match the right suggestion. Include a link to the collection and note: *"The delivery date and address can be entered on the checkout page during payment."*
+
+If the order has significant requirements the owner must confirm (e.g. HALAL certification, unusual allergens not covered in standard Sent replies) → flag purple instead.
 
 ## How I Handle Common Enquiries
 

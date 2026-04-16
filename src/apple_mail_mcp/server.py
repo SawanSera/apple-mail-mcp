@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 mcp = FastMCP("apple-mail")
 
 # Initialize mail connector
-mail = AppleMailConnector()
+mail = AppleMailConnector(timeout=180)
 
 
 @mcp.tool()
@@ -93,6 +93,7 @@ def search_messages(
     sender_contains: str | None = None,
     subject_contains: str | None = None,
     read_status: bool | None = None,
+    received_within_hours: int | None = None,
     limit: int = 50,
 ) -> dict[str, Any]:
     """
@@ -104,6 +105,7 @@ def search_messages(
         sender_contains: Filter by sender email/domain
         subject_contains: Filter by subject keywords
         read_status: Filter by read status (true=read, false=unread)
+        received_within_hours: Only return messages received within the last N hours (e.g., 24 for last day, 72 for last 3 days)
         limit: Maximum results to return (default: 50)
 
     Returns:
@@ -116,7 +118,8 @@ def search_messages(
     try:
         logger.info(
             f"Searching messages in {account}/{mailbox} with filters: "
-            f"sender={sender_contains}, subject={subject_contains}, read={read_status}"
+            f"sender={sender_contains}, subject={subject_contains}, read={read_status}, "
+            f"received_within_hours={received_within_hours}"
         )
 
         messages = mail.search_messages(
@@ -125,6 +128,7 @@ def search_messages(
             sender_contains=sender_contains,
             subject_contains=subject_contains,
             read_status=read_status,
+            received_within_hours=received_within_hours,
             limit=limit,
         )
 
@@ -1222,7 +1226,7 @@ def save_draft(
         subject: Email subject
         body: Email body (plain text)
         to: List of recipient email addresses
-        account: Account name to save draft in (e.g., "Ruwi's Cakes Hello")
+        account: Account name to save draft in (e.g., "Order - Ruwi's Cakes")
         cc: List of CC recipients (optional)
         bcc: List of BCC recipients (optional)
 
@@ -1234,7 +1238,7 @@ def save_draft(
             subject="[CLAUDE DRAFT] Re: Cake enquiry",
             body="Hi there, thanks for getting in touch!",
             to=["customer@example.com"],
-            account="Ruwi's Cakes Hello",
+            account="Order - Ruwi's Cakes",
         )
     """
     try:
