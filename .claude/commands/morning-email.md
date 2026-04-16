@@ -68,7 +68,7 @@ Run the Ruwi's Cakes morning email workflow.
 ## Rules
 
 - NEVER send emails — save as drafts only
-- Do NOT modify subject lines
+- Do NOT modify subject lines — use the original subject exactly, with no prefix (no "[CLAUDE DRAFT]" or any other tag)
 - Sign off every draft: *Warm regards, Ruwi's Cakes Team*
 - Tone: warm, friendly, and professional
 - If unsure how to reply, flag purple rather than guess
