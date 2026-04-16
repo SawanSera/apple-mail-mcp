@@ -1,3 +1,6 @@
+# Claude memory (may contain sensitive info — never commit to public repo)
+.claude/memory/
+
 # Python
 __pycache__/
 *.py[cod]
