@@ -16,5 +16,11 @@ Run the end-of-session wrap-up to make sure everything is committed and pushed.
 
 5. **Report** the final state — last 3 commits and confirmation the branch is up to date with origin.
 
+6. **Back up Claude data to iCloud** — sync `~/.claude/` to iCloud Drive:
+   ```bash
+   rsync -a --delete ~/.claude/ ~/Library/Mobile\ Documents/com~apple~CloudDocs/claude-config/
+   ```
+   This backs up memory files, session history, settings, and all Claude data. Report how many files were synced.
+
 ## Note
-Memory files (`.claude/memory/`) are excluded from git — the repo is public. Memory stays local only.
+Memory files (`.claude/memory/`) are excluded from git — the repo is public. Memory stays local only. The iCloud backup (step 6) is where they are kept safe.
