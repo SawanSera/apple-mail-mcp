@@ -933,6 +933,109 @@ forward_message(
 
 ---
 
+## Batch Operations
+
+### get_messages_batch
+
+Fetch multiple messages in a single AppleScript call. Replaces N individual `get_message` calls with one subprocess call — the primary performance optimisation for workflows that need to read many messages.
+
+**Parameters:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `message_ids` | array of strings | Yes | - | List of message IDs to fetch (max 100) |
+| `include_content` | boolean | No | True | If False, returns empty string for content field |
+
+**Returns:**
+
+```json
+{
+  "success": true,
+  "messages": [
+    {
+      "id": "12345",
+      "subject": "Order confirmation",
+      "sender": "customer@example.com",
+      "date_received": "Wed, 22 Apr 2026",
+      "read_status": false,
+      "flagged": false,
+      "replied_to": false,
+      "content": "Hi, I wanted to ask about..."
+    }
+  ],
+  "requested": 3,
+  "fetched": 3
+}
+```
+
+**Notes:**
+- Unknown IDs are silently skipped (no error)
+- Message IDs must be numeric strings; non-numeric IDs raise ValueError
+- Apple Mail integer IDs are not guaranteed globally unique across accounts — prefer using IDs from `search_messages` on a known account
+
+**Example:**
+
+```python
+# Fetch 3 messages in one call instead of three get_message calls
+result = get_messages_batch(message_ids=["111", "222", "333"])
+for msg in result["messages"]:
+    print(msg["subject"], msg["sender"])
+```
+
+---
+
+### save_drafts_batch
+
+Save multiple draft emails in exactly 2 AppleScript calls regardless of how many drafts are in the batch. Replaces N individual `save_draft` calls.
+
+**Parameters:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `drafts` | array of objects | Yes | - | List of draft specs (max 50) |
+| `account` | string | Yes | - | Account name to save drafts under |
+
+Each draft object:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `subject` | string | Yes | Email subject |
+| `body` | string | Yes | Email body text |
+| `to` | array of strings | Yes | Recipient addresses |
+| `cc` | array of strings | No | CC addresses |
+| `bcc` | array of strings | No | BCC addresses |
+
+**Returns:**
+
+```json
+{
+  "success": true,
+  "draft_ids": ["100", "101", "102"],
+  "account": "My Account",
+  "count": 3
+}
+```
+
+**Notes:**
+- IDs are returned in the same order as the input drafts array
+- All recipient addresses are validated before any AppleScript is executed
+- Drafts are saved to the account's Drafts folder and are not sent
+
+**Example:**
+
+```python
+result = save_drafts_batch(
+    drafts=[
+        {"subject": "Re: Order #123", "body": "Hi Jane...", "to": ["jane@example.com"]},
+        {"subject": "Re: Enquiry", "body": "Hi Bob...", "to": ["bob@example.com"], "cc": ["owner@example.com"]},
+    ],
+    account="My Mail Account"
+)
+print(result["draft_ids"])  # ["100", "101"]
+```
+
+---
+
 ## Tool Combinations
 
 ### Example Workflows
