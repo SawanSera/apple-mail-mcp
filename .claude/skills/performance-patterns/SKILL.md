@@ -20,6 +20,8 @@ description: Use when optimizing Apple Mail MCP operations, diagnosing slow quer
 | `mark_as_read` (bulk) | ~1-2s | Single script for N messages |
 | `move_messages` | ~1-3s | Varies by account type (Gmail slower) |
 | `save_attachments` | ~2-5s | Depends on attachment count/size |
+| `get_messages_batch` (N msgs) | ~2-10s | Single call regardless of N; replaces N×get_message |
+| `save_drafts_batch` (N drafts) | ~2s fixed | Exactly 2 osascript calls regardless of N |
 
 ## Pattern 1: Use `whose` Clauses for Server-Side Filtering
 
@@ -56,7 +58,7 @@ Batch operations should always build a single AppleScript that handles all items
 
 ## Pattern 3: Use `limit` for Pagination
 
-The `search_messages` tool accepts a `limit` parameter (default: 50). AppleScript uses `items 1 thru N of` for server-side limiting. Always pass a reasonable limit — fetching 10,000 messages when the user wants the latest 10 wastes time.
+The `search_messages` tool accepts a `limit` parameter (default: 50). The limit is enforced via an in-loop counter (`if msgCount >= limit then exit repeat`) rather than AppleScript slice notation — slice notation throws error -1728 on mailboxes with fewer messages than requested. Always pass a reasonable limit — fetching 10,000 messages when the user wants the latest 10 wastes time.
 
 ## Pattern 4: Accept Optional Account/Mailbox Parameters
 

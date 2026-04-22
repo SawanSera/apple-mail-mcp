@@ -6,11 +6,12 @@
 
 An MCP server that provides programmatic access to Apple Mail, enabling AI assistants like Claude to read, send, search, and manage emails on macOS.
 
-## Tools (14)
+## Tools (16)
 
 **Core:** list_mailboxes, search_messages, get_message, send_email, mark_as_read
 **Attachments & Management:** send_email_with_attachments, get_attachments, save_attachments, move_messages, flag_message, create_mailbox, delete_messages
 **Reply/Forward:** reply_to_message, forward_message
+**Batch Operations:** get_messages_batch, save_drafts_batch
 
 ## Prerequisites
 
