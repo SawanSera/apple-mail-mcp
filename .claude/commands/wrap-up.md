@@ -1,4 +1,4 @@
-Run the end-of-session wrap-up to make sure everything is committed and pushed.
+Run the end-of-session wrap-up to make sure everything is committed, pushed, docs are current, and data is backed up.
 
 ## Steps
 
@@ -14,27 +14,28 @@ Run the end-of-session wrap-up to make sure everything is committed and pushed.
 
 4. **If already clean and up to date**, confirm.
 
-5. **Check docs are in sync** — compare the current state of the codebase against these docs and update any that are stale:
-   - `.claude/CLAUDE.md` — tool count, unit test count
-   - `docs/reference/TOOLS.md` — every public `@mcp.tool()` in `server.py` must have a reference entry
-   - `docs/reference/ARCHITECTURE.md` — tool count in the component diagram
-   - `TECH_DEBT.md` — tool count references; remove any items that were resolved this session
-   - `README.md` — feature list or tool count if present
-   - If anything is stale, update and commit in a separate "Update docs" commit before reporting done.
+5. **Check all markdown files are in sync** — run:
+   ```bash
+   find . -name "*.md" | grep -v ".venv\|__pycache__\|.pytest_cache\|node_modules"
+   ```
+   Read every file in the list and check whether its content reflects the current state of the codebase. Pay particular attention to:
+   - **Tool counts** — any file mentioning a number of MCP tools (currently 16)
+   - **Test counts** — any file mentioning unit/integration test counts
+   - **API surface lists** — any file listing available tools or methods
+   - **Architecture descriptions** — component diagrams, file line counts, module descriptions
+   - **Tech debt items** — remove any items resolved this session
+   - **Skill files** (`.claude/skills/*/SKILL.md`) — patterns, timings, or workarounds that changed
+   - **Command files** (`.claude/commands/*.md`) — workflow steps that changed
+
+   If anything is stale, update it and commit in a single "Update docs" commit before reporting done.
 
 6. **Report** the final state — last 3 commits and confirmation the branch is up to date with origin.
 
 7. **Back up Claude data to iCloud** — sync `~/.claude/` to iCloud Drive:
    ```bash
-   rsync -a --delete ~/.claude/ ~/Library/Mobile\ Documents/com~apple~CloudDocs/claude-config/
+   rsync -a --delete ~/.claude/ ~/Library/Mobile\ Documents/com~apple~CloudDocs/claude-config/ && rsync -a --delete ~/.claude/ ~/Library/Mobile\ Documents/com~apple~CloudDocs/claude-config/ --stats 2>&1 | grep "Number of files"
    ```
-   This backs up memory files, session history, settings, and all Claude data. Report how many files were synced.
-
-6. **Back up Claude data to iCloud** — sync `~/.claude/` to iCloud Drive:
-   ```bash
-   rsync -a --delete ~/.claude/ ~/Library/Mobile\ Documents/com~apple~CloudDocs/claude-config/
-   ```
-   This backs up memory files, session history, settings, and all Claude data. Report how many files were synced.
+   Report how many files were synced and confirm the backup completed successfully.
 
 ## Note
-Memory files (`.claude/memory/`) are excluded from git — the repo is public. Memory stays local only. The iCloud backup (step 6) is where they are kept safe.
+Memory files (`.claude/memory/`) are excluded from git — the repo is public. Memory stays local only. The iCloud backup (step 7) is where they are kept safe.
