@@ -14,7 +14,18 @@ Run the end-of-session wrap-up to make sure everything is committed and pushed.
 
 4. **If already clean and up to date**, confirm.
 
-5. **Report** the final state — last 3 commits and confirmation the branch is up to date with origin.
+5. **Check docs are in sync** — compare the current state of the codebase against these docs and update any that are stale:
+   - `.claude/CLAUDE.md` — tool count, unit test count, key file line counts
+   - `docs/reference/TOOLS.md` — every public `@mcp.tool()` in `server.py` must have a reference entry; check for missing or outdated entries
+   - If anything is stale, update and commit in a separate "Update docs" commit before reporting done.
+
+6. **Report** the final state — last 3 commits and confirmation the branch is up to date with origin.
+
+7. **Back up Claude data to iCloud** — sync `~/.claude/` to iCloud Drive:
+   ```bash
+   rsync -a --delete ~/.claude/ ~/Library/Mobile\ Documents/com~apple~CloudDocs/claude-config/
+   ```
+   This backs up memory files, session history, settings, and all Claude data. Report how many files were synced.
 
 6. **Back up Claude data to iCloud** — sync `~/.claude/` to iCloud Drive:
    ```bash
