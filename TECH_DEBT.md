@@ -8,7 +8,7 @@ Items identified during the April 2026 design pattern review. Ordered by priorit
 
 ### 1. TypedDict response types on all server tools
 **File:** `src/apple_mail_mcp/server.py` — every tool handler  
-**Problem:** All 14 tools return `dict[str, Any]`, giving callers no type safety and no IDE autocomplete on response keys. Success and error paths return different shapes with no contract enforcing it.  
+**Problem:** All 16 tools return `dict[str, Any]`, giving callers no type safety and no IDE autocomplete on response keys. Success and error paths return different shapes with no contract enforcing it.  
 **Fix:** Define `TypedDict` classes for each tool's success and error response, update return type annotations.  
 **Prerequisite:** Write tests that validate response shapes before changing the types (TDD).
 

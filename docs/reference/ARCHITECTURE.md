@@ -8,7 +8,7 @@ Claude Desktop / MCP Client
         | (MCP JSON-RPC over stdio)
         v
 server.py (FastMCP)
-  |-- 14 @mcp.tool() functions
+  |-- 16 @mcp.tool() functions
   |-- Input validation
   |-- Response formatting
   |-- Error wrapping (exceptions -> dicts)
