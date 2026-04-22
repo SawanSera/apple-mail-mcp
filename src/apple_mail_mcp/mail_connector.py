@@ -72,12 +72,16 @@ class AppleMailConnector:
                 error_msg = result.stderr.strip()
                 logger.error(f"AppleScript error: {error_msg}")
 
+                # macOS uses curly apostrophe U+2019 in error strings; normalise
+                # before matching so checks work regardless of encoding.
+                normalised = error_msg.replace("’", "'")
+
                 # Parse error and raise appropriate exception
-                if "Can't get account" in error_msg:
+                if "Can't get account" in normalised:
                     raise MailAccountNotFoundError(error_msg)
-                elif "Can't get mailbox" in error_msg:
+                elif "Can't get mailbox" in normalised:
                     raise MailMailboxNotFoundError(error_msg)
-                elif "Can't get message" in error_msg:
+                elif "Can't get message" in normalised:
                     raise MailMessageNotFoundError(error_msg)
                 else:
                     raise MailAppleScriptError(error_msg)
@@ -219,12 +223,13 @@ class AppleMailConnector:
             conditions.append(f"read status is {status}")
 
         whose_clause = " and ".join(conditions) if conditions else ""
-        limit_clause = f"items 1 thru {limit} of" if limit else ""
 
         if whose_clause:
             fetch_expr = f"set matchedMessages to (messages of mailboxRef whose {whose_clause})"
         else:
-            fetch_expr = f"set matchedMessages to {limit_clause} (messages of mailboxRef)"
+            # Avoid "items 1 thru N of" slice notation — it throws error -1728 when
+            # the mailbox has fewer messages than N. Use the loop limit_check instead.
+            fetch_expr = "set matchedMessages to every message of mailboxRef"
 
         limit_check = f"if msgCount >= {limit} then exit repeat\n                " if limit else ""
 
@@ -1113,6 +1118,214 @@ class AppleMailConnector:
 
         result = self._run_applescript(script)
         return result
+
+    def get_messages_batch(
+        self,
+        message_ids: list[str],
+        include_content: bool = True,
+    ) -> list[dict[str, Any]]:
+        """
+        Fetch multiple messages in a single AppleScript call.
+
+        Reduces N osascript subprocess calls to 1 for bulk fetching.
+        Messages not found in any mailbox are silently skipped.
+
+        Args:
+            message_ids: List of message IDs to fetch (max 100)
+            include_content: Include message body text
+
+        Returns:
+            List of message dicts in the order they were found
+            (may be shorter than input if some IDs were not found)
+
+        Raises:
+            ValueError: If more than 100 IDs are provided or any ID is invalid
+        """
+        if not message_ids:
+            return []
+
+        if len(message_ids) > 100:
+            raise ValueError(
+                f"Too many message IDs ({len(message_ids)}). Maximum is 100."
+            )
+
+        safe_ids = [sanitize_message_id(mid) for mid in message_ids]
+        id_list = ", ".join(safe_ids)
+
+        content_clause = "set msgContent to content of msg" if include_content else 'set msgContent to ""'
+
+        script = f"""
+        with timeout of 300 seconds
+        tell application "Mail"
+            set idList to {{{id_list}}}
+            set resultList to {{}}
+
+            repeat with targetId in idList
+                set found to false
+                repeat with acc in accounts
+                    if found then exit repeat
+                    repeat with mb in mailboxes of acc
+                        if found then exit repeat
+                        try
+                            set msg to first message of mb whose id is targetId
+                            set msgId to id of msg as text
+                            set msgSubject to subject of msg
+                            set msgSender to sender of msg
+                            set msgDate to date received of msg as text
+                            set msgRead to read status of msg as text
+                            set msgFlagged to flagged status of msg as text
+                            set msgReplied to (was replied to of msg) as text
+                            {content_clause}
+
+                            set msgData to msgId & (ASCII character 31) & msgSubject & (ASCII character 31) & msgSender & (ASCII character 31) & msgDate & (ASCII character 31) & msgRead & (ASCII character 31) & msgFlagged & (ASCII character 31) & msgReplied & (ASCII character 31) & msgContent
+                            set end of resultList to msgData
+                            set found to true
+                        end try
+                    end repeat
+                end repeat
+            end repeat
+
+            -- Use ASCII character 30 (Record Separator) to delimit records.
+            -- Linefeed cannot be used here because email content contains newlines.
+            set AppleScript's text item delimiters to (ASCII character 30)
+            set output to resultList as text
+            set AppleScript's text item delimiters to ""
+            return output
+        end tell
+        end timeout
+        """
+
+        result = self._run_applescript(script)
+
+        messages = []
+        if result:
+            for line in result.split("\x1e"):
+                if not line:
+                    continue
+                parts = line.split("\x1f", 7)
+                if len(parts) >= 6:
+                    messages.append({
+                        "id": parts[0],
+                        "subject": parts[1],
+                        "sender": parts[2],
+                        "date_received": parts[3],
+                        "read_status": parts[4].lower() == "true",
+                        "flagged": parts[5].lower() == "true",
+                        "replied_to": parts[6].lower() == "true" if len(parts) > 6 else False,
+                        "content": parts[7] if len(parts) > 7 else "",
+                    })
+
+        return messages
+
+    def save_drafts_batch(
+        self,
+        drafts: list[dict[str, Any]],
+        account: str,
+    ) -> list[str]:
+        """
+        Save multiple email drafts in two AppleScript calls regardless of count.
+
+        The first call resolves the account's sender address; the second creates
+        all drafts in a single AppleScript loop, reducing N save_draft calls (2N
+        osascript calls) down to exactly 2 calls.
+
+        Args:
+            drafts: List of draft specs. Each dict must contain:
+                - subject (str)
+                - body (str)
+                - to (list[str])
+                - cc (list[str] | None, optional)
+                - bcc (list[str] | None, optional)
+            account: Account name to save all drafts in
+
+        Returns:
+            List of draft message IDs in the same order as input
+
+        Raises:
+            ValueError: If more than 50 drafts are provided
+            MailAppleScriptError: If the AppleScript operation fails
+        """
+        if not drafts:
+            return []
+
+        if len(drafts) > 50:
+            raise ValueError(
+                f"Too many drafts ({len(drafts)}). Maximum is 50 per batch."
+            )
+
+        account_safe = escape_applescript_string(sanitize_input(account))
+
+        # Call 1: resolve account sender address (same logic as save_draft).
+        # Assigning email addresses to a record property first avoids the
+        # type-coercion error (-1700) that occurs when concatenating email
+        # address objects directly with "".
+        email_script = f"""
+        tell application "Mail"
+            set acc to account "{account_safe}"
+            set accInfo to {{emails:(email addresses of acc)}}
+            set output to ""
+            repeat with addr in emails of accInfo
+                set output to "" & addr
+                exit repeat
+            end repeat
+            return output
+        end tell
+        """
+        sender_email = self._run_applescript(email_script).strip()
+
+        # Call 2: build one script that creates all N drafts
+        draft_blocks: list[str] = []
+        for i, draft in enumerate(drafts):
+            subj = escape_applescript_string(sanitize_input(draft["subject"]))
+            body = escape_applescript_string(sanitize_input(draft["body"]))
+            to_list = format_recipient_list(draft["to"])
+
+            cc = draft.get("cc") or []
+            bcc = draft.get("bcc") or []
+            cc_list = format_recipient_list(cc)
+            bcc_list = format_recipient_list(bcc)
+
+            cc_block = ""
+            if cc:
+                cc_block = f"""
+                repeat with addr in {{{cc_list}}}
+                    make new cc recipient with properties {{address:addr}}
+                end repeat"""
+
+            bcc_block = ""
+            if bcc:
+                bcc_block = f"""
+                repeat with addr in {{{bcc_list}}}
+                    make new bcc recipient with properties {{address:addr}}
+                end repeat"""
+
+            draft_blocks.append(f"""
+            set msg_{i} to make new outgoing message with properties {{subject:"{subj}", content:"{body}", visible:false, sender:"{sender_email}"}}
+            tell msg_{i}
+                repeat with addr in {{{to_list}}}
+                    make new to recipient with properties {{address:addr}}
+                end repeat{cc_block}{bcc_block}
+            end tell
+            save msg_{i}
+            set end of draftIds to (id of msg_{i} as text)""")
+
+        all_blocks = "\n".join(draft_blocks)
+
+        create_script = f"""
+        tell application "Mail"
+            set draftIds to {{}}
+            {all_blocks}
+
+            set AppleScript's text item delimiters to linefeed
+            set output to draftIds as text
+            set AppleScript's text item delimiters to ""
+            return output
+        end tell
+        """
+
+        result = self._run_applescript(create_script)
+
+        return [line for line in result.split("\n") if line.strip()]
 
     def forward_message(
         self,

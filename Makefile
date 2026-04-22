@@ -31,7 +31,7 @@ test-unit:
 	uv run pytest tests/unit/ -q
 
 test-integration:
-	MAIL_TEST_MODE=true uv run pytest tests/integration/ --run-integration -v
+	MAIL_TEST_MODE=true TEST_MAIL_ACCOUNT=$${TEST_MAIL_ACCOUNT:-Gmail} uv run pytest tests/integration/ --run-integration -v
 
 test-e2e:
 	MAIL_TEST_MODE=true uv run pytest tests/e2e/ -v

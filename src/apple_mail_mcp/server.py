@@ -1279,6 +1279,144 @@ def save_draft(
         }
 
 
+@mcp.tool()
+def get_messages_batch(
+    message_ids: list[str],
+    include_content: bool = True,
+) -> dict[str, Any]:
+    """
+    Fetch multiple messages in a single AppleScript call.
+
+    Dramatically faster than calling get_message in a loop when processing
+    many emails (e.g. the morning email workflow). N individual calls become
+    one subprocess call — saving ~200ms per message in overhead.
+
+    Messages not found in any mailbox are silently skipped; the returned list
+    may be shorter than the input. Maximum 100 message IDs per call.
+
+    Args:
+        message_ids: List of message IDs to fetch (max 100)
+        include_content: Include message body text (default True)
+
+    Returns:
+        Dictionary with success status and list of message dicts
+
+    Example:
+        get_messages_batch(["215490", "215489", "215488"])
+    """
+    try:
+        logger.info(f"Batch fetching {len(message_ids)} messages")
+
+        messages = mail.get_messages_batch(
+            message_ids=message_ids,
+            include_content=include_content,
+        )
+
+        logger.info(f"Fetched {len(messages)} of {len(message_ids)} messages")
+
+        return {
+            "success": True,
+            "messages": messages,
+            "requested": len(message_ids),
+            "fetched": len(messages),
+        }
+
+    except ValueError as e:
+        logger.error(f"Validation error in get_messages_batch: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": "validation_error",
+        }
+    except Exception as e:
+        logger.error(f"Error in get_messages_batch: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": "unknown",
+        }
+
+
+@mcp.tool()
+def save_drafts_batch(
+    drafts: list[dict[str, Any]],
+    account: str,
+) -> dict[str, Any]:
+    """
+    Save multiple email drafts in two AppleScript calls regardless of count.
+
+    Dramatically faster than calling save_draft in a loop. Each individual
+    save_draft makes 2 subprocess calls; this method makes exactly 2 calls
+    total no matter how many drafts are saved — one to resolve the sender
+    address and one to create all drafts. Maximum 50 drafts per call.
+
+    Each draft dict must contain:
+        - subject (str): Email subject
+        - body (str): Email body (plain text)
+        - to (list[str]): List of recipient email addresses
+        - cc (list[str], optional): CC recipients
+        - bcc (list[str], optional): BCC recipients
+
+    Args:
+        drafts: List of draft specification dicts (max 50)
+        account: Account name to save all drafts in
+
+    Returns:
+        Dictionary with success status and list of draft IDs in input order
+
+    Example:
+        save_drafts_batch(
+            drafts=[
+                {"subject": "Re: Cake enquiry", "body": "Hi Hillary...", "to": ["hillarytoh07@gmail.com"]},
+                {"subject": "Re: Wedding cake enquiry", "body": "Hi Ellen...", "to": ["ellenlluyy17@gmail.com"]},
+            ],
+            account="Order - Ruwi's Cakes",
+        )
+    """
+    try:
+        # Validate all recipient lists before hitting AppleScript
+        for i, draft in enumerate(drafts):
+            to = draft.get("to") or []
+            cc = draft.get("cc") or []
+            bcc = draft.get("bcc") or []
+            is_valid, error_msg = validate_send_operation(to, cc or None, bcc or None)
+            if not is_valid:
+                logger.error(f"save_drafts_batch draft[{i}] validation failed: {error_msg}")
+                return {
+                    "success": False,
+                    "error": f"Draft {i}: {error_msg}",
+                    "error_type": "validation_error",
+                }
+
+        logger.info(f"Batch saving {len(drafts)} drafts to account '{account}'")
+
+        draft_ids = mail.save_drafts_batch(drafts=drafts, account=account)
+
+        logger.info(f"Saved {len(draft_ids)} drafts")
+
+        return {
+            "success": True,
+            "draft_ids": draft_ids,
+            "account": account,
+            "count": len(draft_ids),
+        }
+
+    except ValueError as e:
+        logger.error(f"Validation error in save_drafts_batch: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": "validation_error",
+        }
+    except Exception as e:
+        logger.error(f"Error in save_drafts_batch: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": "unknown",
+        }
+
+
 def main() -> None:
     """Run the MCP server."""
     logger.info("Starting Apple Mail MCP server")
