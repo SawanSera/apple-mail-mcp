@@ -37,5 +37,31 @@ Run the end-of-session wrap-up to make sure everything is committed, pushed, doc
    ```
    Report how many files were synced and confirm the backup completed successfully.
 
+8. **Back up project to OneDrive** — sync the full project directory to both OneDrive backup paths:
+   ```bash
+   rsync -a --delete \
+     --exclude='.git/' \
+     --exclude='__pycache__/' \
+     --exclude='.venv/' \
+     --exclude='.pytest_cache/' \
+     --exclude='*.pyc' \
+     --exclude='*.egg-info/' \
+     /Users/sawanserasinghe/ClaudeWork/apple-mail-mcp/ \
+     ~/Library/CloudStorage/OneDrive-Personal/Documents/Claude\ back\ up/apple-mail-mcp/ \
+     --stats 2>&1 | grep "Number of files\|transferred\|deleted"
+
+   rsync -a --delete \
+     --exclude='.git/' \
+     --exclude='__pycache__/' \
+     --exclude='.venv/' \
+     --exclude='.pytest_cache/' \
+     --exclude='*.pyc' \
+     --exclude='*.egg-info/' \
+     /Users/sawanserasinghe/ClaudeWork/apple-mail-mcp/ \
+     ~/Library/CloudStorage/OneDrive-Personal/Documents/Claude\ back\ up/ClaudeWork/apple-mail-mcp/ \
+     --stats 2>&1 | grep "Number of files\|transferred\|deleted"
+   ```
+   Report files transferred for each path and confirm both syncs completed.
+
 ## Note
-Memory files (`.claude/memory/`) are excluded from git — the repo is public. Memory stays local only. The iCloud backup (step 7) is where they are kept safe.
+Memory files (`.claude/memory/`) are excluded from git — the repo is public. Memory stays local only. The iCloud backup (step 7) is where they are kept safe. The OneDrive backup (step 8) covers the full project including `.claude/commands/`, `scripts/`, and `docs/`.
