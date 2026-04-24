@@ -2,6 +2,11 @@ Run the Ruwi's Cakes morning email workflow.
 
 ## Steps
 
+0. **Record start time** — run this immediately before anything else:
+   ```bash
+   date +%s > /tmp/morning_email_start.txt && date '+%H:%M' > /tmp/morning_email_start.txt_time
+   ```
+
 1. **Scan inbox** — use account: **"Order - Ruwi's Cakes"**, mailbox: **"INBOX"**, with the `received_within_hours` parameter (do NOT use `read_status` — this ensures read and unread emails are both included):
    - If today is **Monday**: `received_within_hours=72` (covers Friday afternoon + Saturday + Sunday)
    - Any other day: `received_within_hours=24`
@@ -72,6 +77,32 @@ Run the Ruwi's Cakes morning email workflow.
    **Important:** The script will never reopen a task the owner has manually marked complete in ClickUp. If a task is already closed, it stays closed regardless of what the workflow finds.
 
    The script prints a JSON result with `list_url` — include that URL in your final response to the user so they can open ClickUp directly.
+
+6. **Log the run** — after ClickUp, call the run logger with metrics from this session:
+
+   ```bash
+   source ~/.zprofile && echo '<json>' | python3 scripts/log_run.py
+   ```
+
+   **Payload schema** (fill from actual counts gathered during the run):
+   ```json
+   {
+     "emails_scanned":  "<total returned by search_messages>",
+     "auto_skipped":    "<emails silently skipped>",
+     "orders_reviewed": "<WooCommerce orders processed>",
+     "order_issues":    "<orders where at least one check failed>",
+     "threads_drafted": "<owner-flagged threads where a draft was saved>",
+     "drafts_saved":    "<total drafts saved via save_drafts_batch>",
+     "purple_flagged":  "<emails purple-flagged this run>",
+     "already_replied": "<emails skipped because replied_to was true>",
+     "clickup_tasks":   "<tasks pushed to ClickUp>",
+     "notes":           "<anything unusual — high volume, timeouts, batch retries, etc.>"
+   }
+   ```
+
+   The script calculates `duration_mins` automatically from the start timestamp written in step 0, and fills `date`, `day`, `start_time`, and `end_time` from the system clock. The completed row is appended to `docs/guides/run-log.csv`.
+
+   **Token usage:** Claude Code does not expose per-run token counts to bash scripts. Note the approximate session cost in the `notes` field if visible in the Claude Code status bar, or leave blank.
 
 ## Rules
 
